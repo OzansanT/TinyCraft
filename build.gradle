@@ -1,0 +1,48 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+        google()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.9.3"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+    }
+}
+
+allprojects {
+    apply plugin: 'eclipse'
+    apply plugin: 'idea'
+}
+
+configure(subprojects - project(':android')) {
+    apply plugin: 'java-library'
+    apply plugin: 'kotlin'
+
+    java.sourceCompatibility = JavaVersion.VERSION_1_8
+    java.targetCompatibility = JavaVersion.VERSION_1_8
+
+    compileJava {
+        options.incremental = true
+        options.encoding = 'UTF-8'
+    }
+
+    compileTestJava {
+        options.encoding = 'UTF-8'
+    }
+
+    compileKotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+    compileTestKotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+}
+
+subprojects {
+    version = "$projectVersion"
+    ext.appName = 'TinyCraft'
+
+    repositories {
+        mavenCentral()
+        google()
+    }
+}
+
+eclipse.project.name = 'TinyCraft-parent'
