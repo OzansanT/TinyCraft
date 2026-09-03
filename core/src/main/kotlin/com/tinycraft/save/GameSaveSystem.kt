@@ -54,7 +54,7 @@ class GameSaveSystem(
         require(isCompatible(data)) { "Incompatible TinyCraft save" }
 
         data.modifications.forEach { edit ->
-            world.setBlock(edit.x, edit.y, edit.z, blockId(edit.blockIdValue))
+            world.recordModification(edit.x, edit.y, edit.z, blockId(edit.blockIdValue))
         }
 
         player.position.set(data.player.x, data.player.y, data.player.z)

@@ -5,11 +5,12 @@ import com.tinycraft.config.PlayerConfig
 import com.tinycraft.input.GameAction
 import com.tinycraft.input.InputState
 import com.tinycraft.world.World
-import kotlin.math.floor
 import kotlin.math.sqrt
 
-/** Applies movement/jump/gravity intent while keeping feet on solid voxel terrain. */
-class PlayerMovementSystem(private val world: World) {
+/** Converts movement intent into velocity and delegates voxel contact resolution to PlayerCollisionSystem. */
+class PlayerMovementSystem(world: World) {
+    private val collisionSystem = PlayerCollisionSystem(world)
+
     fun update(delta: Float, player: PlayerState, inputState: InputState) {
         val safeDelta = delta.coerceIn(0f, 0.05f)
         applyHorizontalMovement(safeDelta, player, inputState)
@@ -23,16 +24,7 @@ class PlayerMovementSystem(private val world: World) {
             player.velocity.y += PlayerConfig.GRAVITY * safeDelta
         }
 
-        val groundY = groundFeetY(player.position.x, player.position.z)
-        val nextY = player.position.y + player.velocity.y * safeDelta
-        if (groundY != null && nextY <= groundY && player.velocity.y <= 0f) {
-            player.position.y = groundY
-            player.velocity.y = 0f
-            player.grounded = true
-        } else {
-            player.position.y = nextY
-            player.grounded = false
-        }
+        collisionSystem.moveVertical(player, player.velocity.y * safeDelta)
     }
 
     private fun applyHorizontalMovement(delta: Float, player: PlayerState, inputState: InputState) {
@@ -52,22 +44,9 @@ class PlayerMovementSystem(private val world: World) {
         val rightX = MathUtils.cos(yaw)
         val rightZ = -MathUtils.sin(yaw)
         val speed = PlayerConfig.MOVE_SPEED_BLOCKS_PER_SECOND * delta
-        val nextX = player.position.x + (rightX * side + forwardX * forward) * speed
-        val nextZ = player.position.z + (rightZ * side + forwardZ * forward) * speed
+        val deltaX = (rightX * side + forwardX * forward) * speed
+        val deltaZ = (rightZ * side + forwardZ * forward) * speed
 
-        if (player.grounded) {
-            val targetGround = groundFeetY(nextX, nextZ) ?: return
-            if (targetGround > player.position.y + PlayerConfig.MAX_STEP_HEIGHT) return
-        }
-
-        player.position.x = nextX
-        player.position.z = nextZ
-    }
-
-    private fun groundFeetY(x: Float, z: Float): Float? {
-        val blockX = floor(x.toDouble()).toInt()
-        val blockZ = floor(z.toDouble()).toInt()
-        val surfaceY = world.findHighestSolidY(blockX, blockZ)
-        return if (surfaceY >= 0) surfaceY + 1f else null
+        collisionSystem.moveHorizontal(player, deltaX, deltaZ)
     }
 }

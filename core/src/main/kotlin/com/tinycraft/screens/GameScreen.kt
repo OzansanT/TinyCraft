@@ -21,6 +21,7 @@ import com.tinycraft.ui.TouchHudRenderer
 import com.tinycraft.ui.hotbar.HotbarRenderer
 import com.tinycraft.world.World
 import com.tinycraft.world.generation.WorldGenerator
+import com.tinycraft.world.streaming.ChunkStreamingSystem
 
 /** Composes systems and presentation without absorbing their responsibilities. */
 class GameScreen : ScreenAdapter() {
@@ -28,9 +29,9 @@ class GameScreen : ScreenAdapter() {
     private val loadedSave = saveSystem.loadCompatible()
     private val worldSeed = loadedSave?.worldSeed ?: WorldConfig.DEFAULT_WORLD_SEED
 
-    private val world = World().also { generatedWorld ->
-        WorldGenerator(worldSeed).generateInitialWorld(generatedWorld)
-    }
+    private val world = World()
+    private val worldGenerator = WorldGenerator(worldSeed)
+    private val chunkStreamingSystem = ChunkStreamingSystem(world, worldGenerator)
 
     private val inputState = InputState()
     private val player = PlayerState()
@@ -52,7 +53,9 @@ class GameScreen : ScreenAdapter() {
     init {
         if (loadedSave != null) {
             saveSystem.restore(loadedSave, world, player, inventory)
+            chunkStreamingSystem.update(player.position.x, player.position.z)
         } else {
+            chunkStreamingSystem.update(8.5f, 8.5f)
             PlayerSpawnSystem(world).spawn(player, 8, 8)
         }
         cameraController.update()
@@ -70,6 +73,7 @@ class GameScreen : ScreenAdapter() {
             hotbarSelectionSystem.update(inputState, inventory)
             lookSystem.update(player, inputState)
             movementSystem.update(delta, player, inputState)
+            chunkStreamingSystem.update(player.position.x, player.position.z)
             cameraController.update()
             interactionSystem.update(inputState, cameraController.camera)
         } else {

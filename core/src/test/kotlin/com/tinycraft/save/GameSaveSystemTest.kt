@@ -4,7 +4,9 @@ import com.tinycraft.blocks.BlockId
 import com.tinycraft.config.WorldConfig
 import com.tinycraft.player.PlayerInventoryState
 import com.tinycraft.player.PlayerState
+import com.tinycraft.world.ChunkPosition
 import com.tinycraft.world.World
+import com.tinycraft.world.generation.WorldGenerator
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -33,6 +35,7 @@ class GameSaveSystemTest {
         val restoredPlayer = PlayerState()
         val restoredInventory = PlayerInventoryState()
         system.restore(loaded, restoredWorld, restoredPlayer, restoredInventory)
+        WorldGenerator(loaded.worldSeed).generateChunk(restoredWorld, ChunkPosition(0, 0))
 
         assertEquals(BlockId.STONE, restoredWorld.getBlock(2, 8, 2))
         assertEquals(player.position, restoredPlayer.position)
