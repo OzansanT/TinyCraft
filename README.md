@@ -11,6 +11,7 @@ TinyCraft is a small Android-native voxel building game built with **Kotlin + li
 - Game state and gameplay remain inside `core/`.
 - World data is chunk-based.
 - Base terrain is deterministic and seed-driven.
+- Player pose is owned by `PlayerState`; camera state is derived from it.
 - Rendering reads game state; rendering never owns or mutates authoritative gameplay state.
 - UI produces actions; UI does not directly mutate the world.
 - Shared visual values live in root theme files instead of being duplicated.
@@ -26,22 +27,39 @@ TinyCraft/
 │       ├── TinyCraftGame.kt                  # Core application entry
 │       ├── blocks/                           # Block definitions and registry
 │       ├── config/                           # Gameplay/world/render configuration roots
-│       ├── input/                            # Platform-neutral game actions/input state
-│       ├── player/                           # Player-owned state and systems
+│       ├── input/
+│       │   ├── InputState.kt                 # Platform-neutral continuous/transient intents
+│       │   ├── GameInputController.kt        # Input component composition
+│       │   ├── TouchLayout.kt                # Shared control geometry
+│       │   ├── VirtualJoystickController.kt  # Left-thumb movement intent
+│       │   ├── TouchLookController.kt        # Right-side look intent
+│       │   ├── ActionButton.kt               # Input-only action button base
+│       │   ├── JumpButton.kt
+│       │   ├── MineButton.kt
+│       │   └── PlaceButton.kt
+│       ├── player/
+│       │   ├── PlayerState.kt                # Authoritative feet position/velocity/yaw/pitch
+│       │   ├── PlayerInventoryState.kt       # Selected build block ownership
+│       │   ├── PlayerSpawnSystem.kt
+│       │   ├── PlayerMovementSystem.kt
+│       │   ├── PlayerLookSystem.kt
+│       │   ├── PlayerCameraController.kt
+│       │   ├── VoxelRaycaster.kt
+│       │   └── PlayerInteractionSystem.kt    # Mine/place world mutations
 │       ├── rendering/
 │       │   ├── BlockRenderPalette.kt         # Block ID -> centralized theme color
 │       │   ├── ChunkFaceBuilder.kt           # Visible-face extraction
 │       │   ├── ChunkMeshBuilder.kt           # Visible faces -> GPU mesh
 │       │   ├── ChunkRenderCache.kt           # Revision-based GPU mesh cache
-│       │   ├── FaceDirection.kt
-│       │   ├── VisibleFace.kt
-│       │   └── WorldRenderer.kt              # Camera/shader/world presentation
-│       ├── screens/                          # Game/menu screen composition
+│       │   └── WorldRenderer.kt              # Shader/world presentation; consumes camera
+│       ├── ui/
+│       │   └── TouchHudRenderer.kt            # Joystick/buttons/crosshair presentation only
+│       ├── screens/                          # System composition
 │       ├── theme/                            # Shared colors/dimensions/theme values
 │       └── world/
 │           ├── Chunk.kt                      # Compact block storage + mesh revision
 │           ├── ChunkPosition.kt
-│           ├── World.kt                      # World/chunk coordinate access
+│           ├── World.kt                      # World/chunk coordinate + surface queries
 │           └── generation/
 │               ├── TerrainNoise.kt           # Deterministic value noise
 │               └── WorldGenerator.kt         # Seeded terrain generation
@@ -103,13 +121,13 @@ A button may have its own component file, but its gameplay logic must not live i
 Correct flow:
 
 ```text
-MineButton -> GameAction.MINE -> PlayerMiningSystem -> World -> chunk revision -> renderer cache rebuild
+MineButton -> GameAction.MINE -> InputState -> PlayerInteractionSystem -> World -> chunk revision -> renderer cache rebuild
 ```
 
 Incorrect flow:
 
 ```text
-MineButton -> World.removeBlock()
+MineButton -> World.setBlock(...)
 ```
 
 UI is responsible for presentation and intent only.
@@ -138,7 +156,7 @@ config/PlayerConfig.kt
 config/RenderingConfig.kt
 ```
 
-Do not scatter magic values such as chunk size, gravity, movement speed, render distance, terrain amplitude, reach distance, or field of view across unrelated classes.
+Do not scatter magic values such as chunk size, gravity, movement speed, render distance, terrain amplitude, touch sensitivity, reach distance, or field of view across unrelated classes.
 
 ## 6. Dependency direction
 
@@ -158,6 +176,7 @@ Chunk -> Joystick
 Block -> Android Activity
 World -> Android platform code
 Renderer -> authoritative World mutation
+Button -> direct World mutation
 ```
 
 Lower-level world/data code must not know about higher-level UI or Android platform code.
@@ -182,10 +201,10 @@ Each state value must have one authoritative owner.
 
 Examples:
 
-- Player position -> `PlayerState`
+- Player position/yaw/pitch -> `PlayerState`
 - Blocks -> `Chunk` / `World`
-- Inventory contents -> future `InventoryState`
-- Selected hotbar slot -> future hotbar/inventory state
+- Selected build block -> `PlayerInventoryState`
+- Continuous touch intent -> `InputState`
 
 Do not duplicate the same mutable state in several screens/controllers and attempt to synchronize it manually.
 
@@ -232,9 +251,11 @@ Future block metadata can include:
 
 ## 12. Input is action-based
 
-Touch controls, keyboard controls, gamepads, or future platform controls should resolve to platform-neutral `GameAction` values.
+Touch controls, keyboard controls, gamepads, or future platform controls should resolve to platform-neutral `GameAction` values and shared `InputState` intent.
 
-Gameplay should not care whether `MINE` came from a touchscreen button, mouse, keyboard, or controller.
+Gameplay must not care whether `MINE` came from a touchscreen button, mouse, keyboard, or controller.
+
+Input components may claim touches and update input intent; they may not implement movement, mining, placement, or world mutation themselves.
 
 ## 13. Asset organization
 
@@ -303,7 +324,7 @@ Prefer:
 - revision-based chunk rebuilding;
 - visible-face culling;
 - reusable temporary math objects where appropriate;
-- deterministic fixed/controlled simulation timing;
+- bounded frame delta for movement simulation;
 - explicit mobile budgets.
 
 ## 17. File growth rule
@@ -348,7 +369,7 @@ If a feature is intentionally incomplete, keep the incomplete portion isolated b
 
 ## 22. Tests accompany foundational logic
 
-Pure data structures, deterministic generation, visibility/culling rules, and gameplay logic should gain unit tests as they are introduced. Renderer/device behavior can use later integration/device tests.
+Pure data structures, deterministic generation, visibility/culling rules, input state, raycasts, and gameplay logic should gain unit tests as they are introduced. Renderer/device behavior can use later integration/device tests.
 
 ## 23. Commit/PR scope
 
@@ -369,7 +390,7 @@ Prefer coherent development slices. A PR should implement one architectural laye
 - Platform-neutral input actions
 - Minimal game screen and Android launcher
 
-## 0.2 Terrain + chunk rendering — current
+## 0.2 Terrain + chunk rendering — complete
 
 - Deterministic value-noise terrain generation
 - Grass/dirt/stone/sand/water layers
@@ -378,15 +399,32 @@ Prefer coherent development slices. A PR should implement one architectural laye
 - Visible-face extraction across chunk boundaries
 - One GPU mesh per chunk
 - Revision-based mesh cache invalidation
-- Perspective camera + simple voxel shader
+- Perspective voxel shader
 - Unit coverage for terrain determinism and face culling
 
-## Next milestone: 0.3 player camera + mobile controls
+## 0.3 Player camera + mobile controls — complete
 
-1. Introduce player-owned position/yaw/pitch movement state.
-2. Add first-person/third-person camera controller boundary.
-3. Add touch look controller.
-4. Add virtual movement joystick.
-5. Add jump, mine, and place action buttons as separate UI components.
-6. Route every control through `GameAction` instead of directly mutating the world.
-7. Add voxel raycast targeting for mining/placing.
+- Player-owned feet position, velocity, yaw and pitch
+- Surface-based spawn system
+- Movement relative to player yaw
+- Gravity and jump action
+- First-person player camera controller
+- Right-side touch look
+- Left virtual movement joystick
+- Separate Jump, Mine and Place input components
+- Shared touch layout for rendering/hit testing
+- Touch HUD with joystick, action icons and crosshair
+- Voxel raycast targeting
+- Raycast-driven mining and placement through gameplay systems
+- Input reset when the game screen deactivates
+- Tests for input state, look, movement/jump and raycast targeting
+
+## Next milestone: 0.4 inventory + save/load
+
+1. Add six-slot hotbar state and selected-slot actions.
+2. Replace temporary selected-build-block state with inventory-owned item stacks.
+3. Add block collection on mining and consumption on placement.
+4. Add versioned player/world save data using existing `SAVE_VERSION` and `GENERATION_VERSION`.
+5. Persist player pose, hotbar/inventory and player-made block modifications.
+6. Add pause/save flow without putting storage logic in UI components.
+7. Add round-trip unit tests for save compatibility and inventory mutations.
