@@ -18,9 +18,13 @@ class Chunk(val position: ChunkPosition) {
 
     fun setBlock(x: Int, y: Int, z: Int, blockId: BlockId) {
         val index = indexOf(x, y, z)
-        if (blocks[index].toInt() == blockId.value) return
+        if ((blocks[index].toInt() and 0xFF) == blockId.value) return
 
         blocks[index] = blockId.value.toByte()
+        isDirty = true
+    }
+
+    fun markMeshDirty() {
         isDirty = true
     }
 
