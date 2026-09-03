@@ -23,7 +23,10 @@ class SaveCodec {
     }
 
     fun decode(text: String): SaveData? = runCatching {
-        val lines = text.lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
+        val lines = text.lineSequence()
+            .map { line -> line.trim() }
+            .filter { line -> line.isNotEmpty() }
+            .toList()
         require(lines.firstOrNull() == HEADER) { "Missing TinyCraft save header" }
 
         var version: Int? = null
