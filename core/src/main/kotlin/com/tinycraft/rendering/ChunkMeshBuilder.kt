@@ -3,7 +3,6 @@ package com.tinycraft.rendering
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Mesh
 import com.badlogic.gdx.graphics.VertexAttribute
-import kotlin.math.min
 
 /** Converts already-culled visible faces into one non-indexed GPU mesh per chunk. */
 class ChunkMeshBuilder {
@@ -19,13 +18,9 @@ class ChunkMeshBuilder {
         for (face in faces) {
             val offsets = verticesFor(face.direction)
             val baseColor = BlockRenderPalette.color(face.blockId)
-            val shade = face.direction.shade
-            val packedColor = Color.toFloatBits(
-                min(1f, baseColor.r * shade),
-                min(1f, baseColor.g * shade),
-                min(1f, baseColor.b * shade),
-                baseColor.a
-            )
+            val packedColor = Color(baseColor)
+                .mul(face.direction.shade, face.direction.shade, face.direction.shade, 1f)
+                .toFloatBits()
 
             var index = 0
             while (index < offsets.size) {
