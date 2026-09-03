@@ -7,6 +7,7 @@ object GameDimensions {
     const val TOUCH_BUTTON_SIZE = 72f
     const val JOYSTICK_DIAMETER = 160f
     const val HOTBAR_SLOT_SIZE = 64f
+    const val HOTBAR_BLOCK_INSET = 9f
     const val HUD_LINE_WIDTH = 3f
     const val CROSSHAIR_HALF_SIZE = 8f
 }

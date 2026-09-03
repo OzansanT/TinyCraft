@@ -4,6 +4,7 @@ import com.badlogic.gdx.ScreenAdapter
 import com.tinycraft.config.WorldConfig
 import com.tinycraft.input.GameInputController
 import com.tinycraft.input.InputState
+import com.tinycraft.inventory.HotbarSelectionSystem
 import com.tinycraft.player.PlayerCameraController
 import com.tinycraft.player.PlayerInteractionSystem
 import com.tinycraft.player.PlayerInventoryState
@@ -12,30 +13,48 @@ import com.tinycraft.player.PlayerMovementSystem
 import com.tinycraft.player.PlayerSpawnSystem
 import com.tinycraft.player.PlayerState
 import com.tinycraft.rendering.WorldRenderer
+import com.tinycraft.save.GameSaveSystem
+import com.tinycraft.save.LocalSaveRepository
+import com.tinycraft.session.GameSessionState
+import com.tinycraft.session.PauseSystem
 import com.tinycraft.ui.TouchHudRenderer
+import com.tinycraft.ui.hotbar.HotbarRenderer
 import com.tinycraft.world.World
 import com.tinycraft.world.generation.WorldGenerator
 
 /** Composes systems and presentation without absorbing their responsibilities. */
 class GameScreen : ScreenAdapter() {
+    private val saveSystem = GameSaveSystem(LocalSaveRepository())
+    private val loadedSave = saveSystem.loadCompatible()
+    private val worldSeed = loadedSave?.worldSeed ?: WorldConfig.DEFAULT_WORLD_SEED
+
     private val world = World().also { generatedWorld ->
-        WorldGenerator(WorldConfig.DEFAULT_WORLD_SEED).generateInitialWorld(generatedWorld)
+        WorldGenerator(worldSeed).generateInitialWorld(generatedWorld)
     }
 
     private val inputState = InputState()
-    private val player = PlayerState().also { state -> PlayerSpawnSystem(world).spawn(state, 8, 8) }
+    private val player = PlayerState()
     private val inventory = PlayerInventoryState()
+    private val session = GameSessionState()
 
     private val movementSystem = PlayerMovementSystem(world)
     private val lookSystem = PlayerLookSystem()
+    private val hotbarSelectionSystem = HotbarSelectionSystem()
     private val interactionSystem = PlayerInteractionSystem(world, player, inventory)
+    private val pauseSystem = PauseSystem()
     private val cameraController = PlayerCameraController(player)
 
     private val worldRenderer = WorldRenderer(world)
     private val touchHudRenderer = TouchHudRenderer(inputState)
+    private val hotbarRenderer = HotbarRenderer(inventory)
     private val inputController = GameInputController(inputState)
 
     init {
+        if (loadedSave != null) {
+            saveSystem.restore(loadedSave, world, player, inventory)
+        } else {
+            PlayerSpawnSystem(world).spawn(player, 8, 8)
+        }
         cameraController.update()
     }
 
@@ -44,13 +63,22 @@ class GameScreen : ScreenAdapter() {
     }
 
     override fun render(delta: Float) {
-        lookSystem.update(player, inputState)
-        movementSystem.update(delta, player, inputState)
-        cameraController.update()
-        interactionSystem.update(inputState, cameraController.camera)
+        val pauseChanged = pauseSystem.update(inputState, session)
+        if (pauseChanged && session.paused) saveGame()
+
+        if (!session.paused) {
+            hotbarSelectionSystem.update(inputState, inventory)
+            lookSystem.update(player, inputState)
+            movementSystem.update(delta, player, inputState)
+            cameraController.update()
+            interactionSystem.update(inputState, cameraController.camera)
+        } else {
+            cameraController.update()
+        }
 
         worldRenderer.render(cameraController.camera)
-        touchHudRenderer.render()
+        touchHudRenderer.render(session.paused)
+        hotbarRenderer.render()
     }
 
     override fun resize(width: Int, height: Int) {
@@ -58,12 +86,19 @@ class GameScreen : ScreenAdapter() {
     }
 
     override fun hide() {
+        saveGame()
         inputController.deactivate()
     }
 
     override fun dispose() {
+        saveGame()
         inputController.dispose()
+        hotbarRenderer.dispose()
         touchHudRenderer.dispose()
         worldRenderer.dispose()
+    }
+
+    private fun saveGame() {
+        saveSystem.save(worldSeed, world, player, inventory)
     }
 }
