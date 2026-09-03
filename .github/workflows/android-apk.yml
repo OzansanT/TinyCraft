@@ -35,13 +35,45 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Run core tests and build debug APK
-        run: gradle :core:test :android:assembleDebug --no-daemon --stacktrace
+      - name: Run core tests
+        id: core_tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :core:test --no-daemon --console=plain --stacktrace 2>&1 | tee core-test.log
+
+      - name: Build debug APK
+        id: build_apk
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :android:assembleDebug --no-daemon --console=plain --stacktrace 2>&1 | tee android-build.log
+
+      - name: Upload CI diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TinyCraft-ci-logs
+          path: |
+            core-test.log
+            android-build.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload TinyCraft debug APK
+        if: steps.build_apk.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: TinyCraft-debug-APK
           path: android/build/outputs/apk/debug/android-debug.apk
           if-no-files-found: error
           retention-days: 90
+
+      - name: Enforce build gate
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.core_tests.outcome }}" = "success"
+          test "${{ steps.build_apk.outcome }}" = "success"
