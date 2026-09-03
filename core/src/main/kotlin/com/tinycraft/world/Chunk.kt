@@ -9,7 +9,8 @@ class Chunk(val position: ChunkPosition) {
         WorldConfig.CHUNK_WIDTH * WorldConfig.CHUNK_HEIGHT * WorldConfig.CHUNK_DEPTH
     ) { BlockId.AIR.value.toByte() }
 
-    var isDirty: Boolean = true
+    /** Monotonic invalidation token. Renderers read this value but never reset it. */
+    var meshRevision: Long = 0L
         private set
 
     fun getBlock(x: Int, y: Int, z: Int): BlockId {
@@ -18,14 +19,14 @@ class Chunk(val position: ChunkPosition) {
 
     fun setBlock(x: Int, y: Int, z: Int, blockId: BlockId) {
         val index = indexOf(x, y, z)
-        if (blocks[index].toInt() == blockId.value) return
+        if ((blocks[index].toInt() and 0xFF) == blockId.value) return
 
         blocks[index] = blockId.value.toByte()
-        isDirty = true
+        meshRevision += 1L
     }
 
-    fun markMeshClean() {
-        isDirty = false
+    fun markMeshDirty() {
+        meshRevision += 1L
     }
 
     private fun indexOf(x: Int, y: Int, z: Int): Int {
