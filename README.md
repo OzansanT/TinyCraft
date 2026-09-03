@@ -1,36 +1,50 @@
 # TinyCraft
 
-TinyCraft is a small Android-native voxel building game built with **Kotlin + libGDX**. The first target is a fast, simple mobile loop: explore, mine, collect, place, build, save, and continue.
+TinyCraft is a small Android-native voxel building game built with **Kotlin + libGDX**. The target loop is simple and mobile-first: explore, mine, collect, place, build, save, and continue.
 
 ## Technical direction
 
 - Android-first native application; no WebView and no JavaScript game runtime.
 - Kotlin owns game code.
-- libGDX provides the cross-platform game/rendering layer.
+- libGDX provides the game/rendering layer.
 - Android-specific integrations stay inside `android/`.
 - Game state and gameplay remain inside `core/`.
-- World data is chunk-based from the beginning.
-- Rendering reads game state; rendering never owns game state.
+- World data is chunk-based.
+- Base terrain is deterministic and seed-driven.
+- Rendering reads game state; rendering never owns or mutates authoritative gameplay state.
 - UI produces actions; UI does not directly mutate the world.
 - Shared visual values live in root theme files instead of being duplicated.
 
-## Initial project map
+## Current project map
 
 ```text
 TinyCraft/
-├── android/                         # Android launcher/platform integration only
-├── assets/                          # Textures, audio, shaders, fonts and data
+├── android/                                  # Android launcher/platform integration only
+├── assets/                                   # Textures, audio, shaders, fonts and data
 ├── core/
 │   └── src/main/kotlin/com/tinycraft/
-│       ├── TinyCraftGame.kt         # Core application entry
-│       ├── blocks/                  # Block definitions and registry
-│       ├── config/                  # Gameplay/world/render configuration roots
-│       ├── input/                   # Platform-neutral game actions/input state
-│       ├── player/                  # Player-owned state and systems
-│       ├── rendering/               # Render-only code
-│       ├── screens/                 # Game/menu screen composition
-│       ├── theme/                   # Shared colors/dimensions/theme values
-│       └── world/                   # Chunk/world state
+│       ├── TinyCraftGame.kt                  # Core application entry
+│       ├── blocks/                           # Block definitions and registry
+│       ├── config/                           # Gameplay/world/render configuration roots
+│       ├── input/                            # Platform-neutral game actions/input state
+│       ├── player/                           # Player-owned state and systems
+│       ├── rendering/
+│       │   ├── BlockRenderPalette.kt         # Block ID -> centralized theme color
+│       │   ├── ChunkFaceBuilder.kt           # Visible-face extraction
+│       │   ├── ChunkMeshBuilder.kt           # Visible faces -> GPU mesh
+│       │   ├── ChunkRenderCache.kt           # Revision-based GPU mesh cache
+│       │   ├── FaceDirection.kt
+│       │   ├── VisibleFace.kt
+│       │   └── WorldRenderer.kt              # Camera/shader/world presentation
+│       ├── screens/                          # Game/menu screen composition
+│       ├── theme/                            # Shared colors/dimensions/theme values
+│       └── world/
+│           ├── Chunk.kt                      # Compact block storage + mesh revision
+│           ├── ChunkPosition.kt
+│           ├── World.kt                      # World/chunk coordinate access
+│           └── generation/
+│               ├── TerrainNoise.kt           # Deterministic value noise
+│               └── WorldGenerator.kt         # Seeded terrain generation
 ├── build.gradle
 ├── gradle.properties
 └── settings.gradle
@@ -46,7 +60,7 @@ Every meaningful component, system, model, controller, renderer, configuration o
 
 Do not grow a single `GameScreen.kt`, `GameManager.kt`, `Utils.kt`, or similar file into a dumping ground.
 
-Preferred naming:
+Preferred naming includes:
 
 - `SomethingScreen`
 - `SomethingRenderer`
@@ -73,7 +87,7 @@ Rendering         -> renderer/mesh file
 Constants         -> config/theme file
 ```
 
-Example for a hotbar:
+Example for a future hotbar:
 
 ```text
 ui/hotbar/Hotbar.kt
@@ -89,7 +103,7 @@ A button may have its own component file, but its gameplay logic must not live i
 Correct flow:
 
 ```text
-MineButton -> GameAction.MINE -> PlayerMiningSystem -> World -> dirty Chunk -> renderer
+MineButton -> GameAction.MINE -> PlayerMiningSystem -> World -> chunk revision -> renderer cache rebuild
 ```
 
 Incorrect flow:
@@ -112,22 +126,6 @@ theme/GameTheme.kt
 
 Do not scatter arbitrary UI colors, HUD sizes, joystick sizes, paddings, or common dimensions across feature files.
 
-### Color rule
-
-Do not hardcode repeated colors inside UI/rendering code.
-
-Bad:
-
-```kotlin
-Color(0.31f, 0.72f, 0.21f, 1f)
-```
-
-Good:
-
-```kotlin
-GameColors.GRASS
-```
-
 A new globally reused color must be added to `GameColors.kt` first.
 
 ## 5. Central configuration roots are mandatory
@@ -140,7 +138,7 @@ config/PlayerConfig.kt
 config/RenderingConfig.kt
 ```
 
-Do not scatter magic values like chunk size, gravity, movement speed, render distance, reach distance, or field of view across unrelated classes.
+Do not scatter magic values such as chunk size, gravity, movement speed, render distance, terrain amplitude, reach distance, or field of view across unrelated classes.
 
 ## 6. Dependency direction
 
@@ -159,7 +157,7 @@ World -> UI
 Chunk -> Joystick
 Block -> Android Activity
 World -> Android platform code
-Renderer -> mutating World state
+Renderer -> authoritative World mutation
 ```
 
 Lower-level world/data code must not know about higher-level UI or Android platform code.
@@ -193,31 +191,33 @@ Do not duplicate the same mutable state in several screens/controllers and attem
 
 ## 9. World data is chunk-based
 
-Do not represent the final voxel world as thousands of independent scene objects.
+Do not represent the voxel world as thousands of permanent scene objects.
 
-World storage is chunk-based. Initial constants are centralized in `WorldConfig`.
+World storage is chunk-based. Chunk dimensions and generation constants are centralized in `WorldConfig`.
 
-Rendering will later build one/few meshes per chunk and omit hidden block faces.
+Rendering builds one GPU mesh per loaded chunk for the current prototype and omits hidden block faces.
 
 ## 10. Renderer is read-only toward gameplay
 
-Renderers may read state and maintain GPU/render caches. They may not decide gameplay outcomes or mutate authoritative world/player data.
+Renderers may read state and maintain GPU/render caches. They may not decide gameplay outcomes or reset/mutate authoritative world/player state.
 
-When a block changes:
+Chunk mesh freshness uses a monotonic `meshRevision` owned by world/chunk code:
 
 ```text
-Gameplay system
--> World/Chunk mutation
--> chunk marked dirty
--> mesh builder rebuilds that chunk
--> renderer displays the new mesh
+Gameplay/world mutation
+-> chunk meshRevision advances
+-> renderer notices revision mismatch
+-> visible faces rebuilt
+-> chunk GPU mesh replaced
 ```
+
+A renderer must never reset a dirty flag on gameplay data to declare itself synchronized.
 
 ## 11. Blocks use a registry
 
 Block properties must be defined centrally through `BlockDefinition` and `BlockRegistry`.
 
-Adding a block should not require adding conditionals to unrelated systems.
+Adding a block should not require conditionals across unrelated systems.
 
 Future block metadata can include:
 
@@ -257,7 +257,7 @@ assets/
 └── data/
 ```
 
-As the asset count grows, introduce an `AssetRegistry` and stop referencing repeated literal asset paths throughout gameplay code.
+As asset count grows, introduce an `AssetRegistry` and stop referencing repeated literal asset paths throughout gameplay code.
 
 ## 14. Save files are versioned
 
@@ -268,6 +268,7 @@ Future structure should include at minimum:
 ```text
 version
 worldSeed
+generationVersion
 player
 chunks/world modifications
 inventory
@@ -277,9 +278,11 @@ Never change serialized save structure without considering migration/backward co
 
 ## 15. World generation must be deterministic
 
-World generation must be seed-driven. The same seed and generation version should produce the same base terrain.
+World generation must be seed-driven. The same seed and generation version must produce the same base terrain.
 
 Do not use uncontrolled global random calls for persistent terrain generation.
+
+Persistent player edits should eventually be stored as modifications layered over generated base terrain rather than requiring the full untouched world to be serialized.
 
 ## 16. Performance rules
 
@@ -297,7 +300,7 @@ Do not:
 Prefer:
 
 - chunk meshes;
-- dirty-chunk rebuilding;
+- revision-based chunk rebuilding;
 - visible-face culling;
 - reusable temporary math objects where appropriate;
 - deterministic fixed/controlled simulation timing;
@@ -345,7 +348,7 @@ If a feature is intentionally incomplete, keep the incomplete portion isolated b
 
 ## 22. Tests accompany foundational logic
 
-Pure data structures and deterministic gameplay logic should gain unit tests as they are introduced. Renderer/device behavior can use later integration/device tests.
+Pure data structures, deterministic generation, visibility/culling rules, and gameplay logic should gain unit tests as they are introduced. Renderer/device behavior can use later integration/device tests.
 
 ## 23. Commit/PR scope
 
@@ -353,16 +356,37 @@ Prefer coherent development slices. A PR should implement one architectural laye
 
 ## 24. Architecture principle
 
-The project-wide rule is:
-
 > **UI displays and produces actions. Systems perform gameplay. Models own state. Renderers render. Platform code handles Android. One layer must not absorb another layer's responsibilities.**
 
-## Current milestone: 0.1 foundation
+# Milestones
 
-1. Android/libGDX project scaffold.
-2. Central theme and configuration roots.
-3. Chunk/world data model.
-4. Block registry.
-5. Platform-neutral input actions.
-6. Minimal game screen and Android launcher.
-7. Next: chunk mesh renderer + visible block terrain prototype.
+## 0.1 Foundation — complete
+
+- Android/libGDX project scaffold
+- Central theme and configuration roots
+- Chunk/world data model
+- Block registry
+- Platform-neutral input actions
+- Minimal game screen and Android launcher
+
+## 0.2 Terrain + chunk rendering — current
+
+- Deterministic value-noise terrain generation
+- Grass/dirt/stone/sand/water layers
+- Seeded initial chunk neighborhood
+- World-coordinate block access across chunks
+- Visible-face extraction across chunk boundaries
+- One GPU mesh per chunk
+- Revision-based mesh cache invalidation
+- Perspective camera + simple voxel shader
+- Unit coverage for terrain determinism and face culling
+
+## Next milestone: 0.3 player camera + mobile controls
+
+1. Introduce player-owned position/yaw/pitch movement state.
+2. Add first-person/third-person camera controller boundary.
+3. Add touch look controller.
+4. Add virtual movement joystick.
+5. Add jump, mine, and place action buttons as separate UI components.
+6. Route every control through `GameAction` instead of directly mutating the world.
+7. Add voxel raycast targeting for mining/placing.
