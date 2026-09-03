@@ -1,6 +1,7 @@
 package com.tinycraft.world
 
 import com.tinycraft.blocks.BlockId
+import com.tinycraft.blocks.BlockRegistry
 import com.tinycraft.config.WorldConfig
 
 /** Owns authoritative chunk state and player-authored modifications. */
@@ -51,11 +52,12 @@ class World {
         WorldModification(key.x, key.y, key.z, blockId)
     }
 
-    fun highestSolidBlockY(worldX: Int, worldZ: Int): Int? {
+    fun findHighestSolidY(worldX: Int, worldZ: Int): Int {
         for (y in WorldConfig.CHUNK_HEIGHT - 1 downTo 0) {
-            if (getBlock(worldX, y, worldZ) != BlockId.AIR) return y
+            val blockId = getBlock(worldX, y, worldZ)
+            if (blockId != BlockId.AIR && BlockRegistry.get(blockId).solid) return y
         }
-        return null
+        return -1
     }
 
     private fun markBoundaryNeighborsDirty(chunkX: Int, chunkZ: Int, localX: Int, localZ: Int) {
