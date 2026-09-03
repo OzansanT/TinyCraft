@@ -1,37 +1,21 @@
 package com.tinycraft.rendering
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.graphics.Camera
 import com.badlogic.gdx.graphics.GL20
-import com.badlogic.gdx.graphics.PerspectiveCamera
 import com.badlogic.gdx.graphics.glutils.ShaderProgram
 import com.badlogic.gdx.utils.Disposable
-import com.tinycraft.config.RenderingConfig
 import com.tinycraft.theme.GameColors
 import com.tinycraft.world.World
 
-/** Read-only presentation layer for World. GPU cache freshness is revision-based. */
+/** Read-only presentation layer for World. Camera ownership stays with the player camera controller. */
 class WorldRenderer(private val world: World) : Disposable {
-    private val camera = PerspectiveCamera(
-        RenderingConfig.FIELD_OF_VIEW_DEGREES,
-        Gdx.graphics.width.toFloat(),
-        Gdx.graphics.height.toFloat()
-    ).apply {
-        near = RenderingConfig.NEAR_PLANE
-        far = RenderingConfig.FAR_PLANE
-        position.set(28f, 24f, 28f)
-        lookAt(8f, 8f, 8f)
-        update()
-    }
-
     private val chunkRenderCache = ChunkRenderCache()
     private val shader = ShaderProgram(VERTEX_SHADER, FRAGMENT_SHADER).also {
         require(it.isCompiled) { "TinyCraft voxel shader failed to compile: ${it.log}" }
     }
 
-    fun render(delta: Float) {
-        @Suppress("UNUSED_VARIABLE")
-        val frameDelta = delta
-
+    fun render(camera: Camera) {
         val sky = GameColors.SKY
         Gdx.gl.glClearColor(sky.r, sky.g, sky.b, sky.a)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT or GL20.GL_DEPTH_BUFFER_BIT)
@@ -46,13 +30,6 @@ class WorldRenderer(private val world: World) : Disposable {
         chunkRenderCache.meshes().forEach { mesh ->
             mesh.render(shader, GL20.GL_TRIANGLES)
         }
-    }
-
-    fun resize(width: Int, height: Int) {
-        if (width <= 0 || height <= 0) return
-        camera.viewportWidth = width.toFloat()
-        camera.viewportHeight = height.toFloat()
-        camera.update()
     }
 
     override fun dispose() {
