@@ -7,6 +7,8 @@ object WorldConfig {
 
     const val DEFAULT_RENDER_DISTANCE_CHUNKS = 4
     const val INITIAL_WORLD_RADIUS_CHUNKS = 1
+    const val STREAM_RADIUS_CHUNKS = 2
+    const val UNLOAD_RADIUS_CHUNKS = 3
 
     const val GENERATION_VERSION = 1
     const val DEFAULT_WORLD_SEED = 783_429L

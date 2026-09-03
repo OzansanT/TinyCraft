@@ -6,7 +6,7 @@ import com.tinycraft.world.ChunkPosition
 import com.tinycraft.world.World
 import kotlin.math.roundToInt
 
-/** Generates deterministic base terrain. Persistent edits will later be layered on top of this base. */
+/** Generates deterministic base terrain and reapplies persistent player modifications. */
 class WorldGenerator(private val seed: Long) {
     fun generateInitialWorld(
         world: World,
@@ -21,18 +21,9 @@ class WorldGenerator(private val seed: Long) {
         }
     }
 
-    fun terrainHeightAt(worldX: Int, worldZ: Int): Int {
-        val broad = TerrainNoise.sample(worldX, worldZ, seed, scale = 32)
-        val detail = TerrainNoise.sample(worldX, worldZ, seed xor DETAIL_SEED_OFFSET, scale = 9)
-        val combined = broad * 0.72f + detail * 0.28f
-        val centered = (combined - 0.5f) * 2f
+    fun generateChunk(world: World, position: ChunkPosition) {
+        if (world.getChunk(position) != null) return
 
-        return (WorldConfig.BASE_TERRAIN_HEIGHT + centered * WorldConfig.TERRAIN_AMPLITUDE)
-            .roundToInt()
-            .coerceIn(2, WorldConfig.CHUNK_HEIGHT - 2)
-    }
-
-    private fun generateChunk(world: World, position: ChunkPosition) {
         val chunk = world.getOrCreateChunk(position)
         val originX = position.x * WorldConfig.CHUNK_WIDTH
         val originZ = position.z * WorldConfig.CHUNK_DEPTH
@@ -56,6 +47,26 @@ class WorldGenerator(private val seed: Long) {
                 }
             }
         }
+
+        world.modificationsForChunk(position).forEach { edit ->
+            chunk.setBlock(
+                Math.floorMod(edit.x, WorldConfig.CHUNK_WIDTH),
+                edit.y,
+                Math.floorMod(edit.z, WorldConfig.CHUNK_DEPTH),
+                edit.blockId
+            )
+        }
+    }
+
+    fun terrainHeightAt(worldX: Int, worldZ: Int): Int {
+        val broad = TerrainNoise.sample(worldX, worldZ, seed, scale = 32)
+        val detail = TerrainNoise.sample(worldX, worldZ, seed xor DETAIL_SEED_OFFSET, scale = 9)
+        val combined = broad * 0.72f + detail * 0.28f
+        val centered = (combined - 0.5f) * 2f
+
+        return (WorldConfig.BASE_TERRAIN_HEIGHT + centered * WorldConfig.TERRAIN_AMPLITUDE)
+            .roundToInt()
+            .coerceIn(2, WorldConfig.CHUNK_HEIGHT - 2)
     }
 
     companion object {
