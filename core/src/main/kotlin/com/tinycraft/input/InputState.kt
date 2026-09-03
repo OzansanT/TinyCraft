@@ -36,4 +36,12 @@ class InputState {
     }
 
     fun consumeAction(action: GameAction): Boolean = queuedActions.remove(action)
+
+    fun reset() {
+        moveX = 0f
+        moveForward = 0f
+        lookDeltaX = 0f
+        lookDeltaY = 0f
+        queuedActions.clear()
+    }
 }

@@ -402,7 +402,7 @@ Prefer coherent development slices. A PR should implement one architectural laye
 - Perspective voxel shader
 - Unit coverage for terrain determinism and face culling
 
-## 0.3 Player camera + mobile controls — current
+## 0.3 Player camera + mobile controls — complete
 
 - Player-owned feet position, velocity, yaw and pitch
 - Surface-based spawn system
@@ -416,6 +416,7 @@ Prefer coherent development slices. A PR should implement one architectural laye
 - Touch HUD with joystick, action icons and crosshair
 - Voxel raycast targeting
 - Raycast-driven mining and placement through gameplay systems
+- Input reset when the game screen deactivates
 - Tests for input state, look, movement/jump and raycast targeting
 
 ## Next milestone: 0.4 inventory + save/load

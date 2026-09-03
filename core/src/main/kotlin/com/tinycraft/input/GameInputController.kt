@@ -6,14 +6,14 @@ import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.utils.Disposable
 
 /** Composes input components without embedding gameplay behavior in them. */
-class GameInputController(inputState: InputState) : Disposable {
-    private val multiplexer = InputMultiplexer(
-        JumpButton(inputState),
-        MineButton(inputState),
-        PlaceButton(inputState),
-        VirtualJoystickController(inputState),
-        TouchLookController(inputState)
-    )
+class GameInputController(private val inputState: InputState) : Disposable {
+    private val multiplexer = InputMultiplexer().apply {
+        addProcessor(JumpButton(inputState))
+        addProcessor(MineButton(inputState))
+        addProcessor(PlaceButton(inputState))
+        addProcessor(VirtualJoystickController(inputState))
+        addProcessor(TouchLookController(inputState))
+    }
     private var previousProcessor: InputProcessor? = null
 
     fun activate() {
@@ -26,6 +26,7 @@ class GameInputController(inputState: InputState) : Disposable {
             Gdx.input.inputProcessor = previousProcessor
         }
         previousProcessor = null
+        inputState.reset()
     }
 
     override fun dispose() {
