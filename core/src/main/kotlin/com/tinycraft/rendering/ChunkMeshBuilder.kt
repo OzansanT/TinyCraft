@@ -3,6 +3,8 @@ package com.tinycraft.rendering
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Mesh
 import com.badlogic.gdx.graphics.VertexAttribute
+import com.badlogic.gdx.graphics.VertexAttributes
+import com.badlogic.gdx.graphics.glutils.ShaderProgram
 
 /** Converts already-culled visible faces into one non-indexed GPU mesh per chunk. */
 class ChunkMeshBuilder {
@@ -36,8 +38,8 @@ class ChunkMeshBuilder {
             true,
             vertexCount,
             0,
-            VertexAttribute.Position(),
-            VertexAttribute.ColorPacked()
+            VertexAttribute(VertexAttributes.Usage.Position, 3, ShaderProgram.POSITION_ATTRIBUTE),
+            VertexAttribute(VertexAttributes.Usage.ColorPacked, 4, ShaderProgram.COLOR_ATTRIBUTE)
         ).also { mesh ->
             mesh.setVertices(vertices)
         }
