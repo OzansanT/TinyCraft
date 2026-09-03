@@ -8,6 +8,8 @@ import com.badlogic.gdx.utils.Disposable
 /** Composes input components without embedding gameplay behavior in them. */
 class GameInputController(private val inputState: InputState) : Disposable {
     private val multiplexer = InputMultiplexer().apply {
+        addProcessor(PauseButton(inputState))
+        addProcessor(HotbarController(inputState))
         addProcessor(JumpButton(inputState))
         addProcessor(MineButton(inputState))
         addProcessor(PlaceButton(inputState))

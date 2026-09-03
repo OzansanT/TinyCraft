@@ -2,13 +2,14 @@ package com.tinycraft.player
 
 import com.badlogic.gdx.graphics.Camera
 import com.tinycraft.blocks.BlockId
+import com.tinycraft.blocks.BlockRegistry
 import com.tinycraft.config.PlayerConfig
 import com.tinycraft.config.WorldConfig
 import com.tinycraft.input.GameAction
 import com.tinycraft.input.InputState
 import com.tinycraft.world.World
 
-/** Performs world mutations for mine/place actions after resolving a player raycast target. */
+/** Performs inventory-aware mine/place mutations after resolving a player raycast target. */
 class PlayerInteractionSystem(
     private val world: World,
     private val player: PlayerState,
@@ -28,6 +29,10 @@ class PlayerInteractionSystem(
 
     private fun mine(target: BlockTarget) {
         if (target.blockY <= 0) return
+        val blockId = world.getBlock(target.blockX, target.blockY, target.blockZ)
+        if (blockId == BlockId.AIR || !BlockRegistry.get(blockId).solid) return
+        if (!inventory.addOne(blockId)) return
+
         world.setBlock(target.blockX, target.blockY, target.blockZ, BlockId.AIR)
     }
 
@@ -36,7 +41,9 @@ class PlayerInteractionSystem(
         if (world.getBlock(target.adjacentX, target.adjacentY, target.adjacentZ) != BlockId.AIR) return
         if (intersectsPlayer(target.adjacentX, target.adjacentY, target.adjacentZ)) return
 
-        world.setBlock(target.adjacentX, target.adjacentY, target.adjacentZ, inventory.selectedBlock)
+        val stack = inventory.selectedStack() ?: return
+        world.setBlock(target.adjacentX, target.adjacentY, target.adjacentZ, stack.blockId)
+        inventory.consumeSelected()
     }
 
     private fun intersectsPlayer(blockX: Int, blockY: Int, blockZ: Int): Boolean {

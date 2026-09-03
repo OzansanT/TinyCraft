@@ -12,6 +12,7 @@ class InputState {
 
     private var lookDeltaX = 0f
     private var lookDeltaY = 0f
+    private var pendingHotbarSlot = -1
     private val queuedActions = EnumSet.noneOf(GameAction::class.java)
 
     fun setMovement(x: Float, forward: Float) {
@@ -37,11 +38,24 @@ class InputState {
 
     fun consumeAction(action: GameAction): Boolean = queuedActions.remove(action)
 
+    fun queueHotbarSelection(slot: Int) {
+        pendingHotbarSlot = slot
+        queuedActions.add(GameAction.SELECT_HOTBAR_SLOT)
+    }
+
+    fun consumeHotbarSelection(): Int? {
+        if (!queuedActions.remove(GameAction.SELECT_HOTBAR_SLOT)) return null
+        val slot = pendingHotbarSlot
+        pendingHotbarSlot = -1
+        return slot.takeIf { it >= 0 }
+    }
+
     fun reset() {
         moveX = 0f
         moveForward = 0f
         lookDeltaX = 0f
         lookDeltaY = 0f
+        pendingHotbarSlot = -1
         queuedActions.clear()
     }
 }

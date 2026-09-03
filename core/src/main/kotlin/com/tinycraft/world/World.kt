@@ -4,9 +4,12 @@ import com.tinycraft.blocks.BlockId
 import com.tinycraft.blocks.BlockRegistry
 import com.tinycraft.config.WorldConfig
 
-/** Owns authoritative chunk state. Renderers may read this object but may not mutate it. */
+/** Owns authoritative chunk state and player-authored modifications. */
 class World {
+    private data class ModificationKey(val x: Int, val y: Int, val z: Int)
+
     private val chunks = mutableMapOf<ChunkPosition, Chunk>()
+    private val modifications = linkedMapOf<ModificationKey, BlockId>()
 
     fun getChunk(position: ChunkPosition): Chunk? = chunks[position]
 
@@ -32,6 +35,7 @@ class World {
 
     fun setBlock(worldX: Int, worldY: Int, worldZ: Int, blockId: BlockId) {
         require(worldY in 0 until WorldConfig.CHUNK_HEIGHT) { "y outside world: $worldY" }
+        if (getBlock(worldX, worldY, worldZ) == blockId) return
 
         val chunkX = Math.floorDiv(worldX, WorldConfig.CHUNK_WIDTH)
         val chunkZ = Math.floorDiv(worldZ, WorldConfig.CHUNK_DEPTH)
@@ -40,7 +44,12 @@ class World {
         val chunk = getOrCreateChunk(ChunkPosition(chunkX, chunkZ))
 
         chunk.setBlock(localX, worldY, localZ, blockId)
+        modifications[ModificationKey(worldX, worldY, worldZ)] = blockId
         markBoundaryNeighborsDirty(chunkX, chunkZ, localX, localZ)
+    }
+
+    fun modifications(): List<WorldModification> = modifications.map { (key, blockId) ->
+        WorldModification(key.x, key.y, key.z, blockId)
     }
 
     fun findHighestSolidY(worldX: Int, worldZ: Int): Int {

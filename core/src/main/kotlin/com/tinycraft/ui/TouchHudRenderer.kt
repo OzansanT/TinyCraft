@@ -11,13 +11,13 @@ import com.tinycraft.input.TouchLayout
 import com.tinycraft.theme.GameColors
 import com.tinycraft.theme.GameDimensions
 
-/** Draws touch controls and crosshair. Hit testing remains in the input components. */
+/** Draws movement/action controls, pause state, and crosshair. Hit testing remains in input components. */
 class TouchHudRenderer(private val inputState: InputState) : Disposable {
     private val shapes = ShapeRenderer()
     private val projection = Matrix4()
     private val center = Vector2()
 
-    fun render() {
+    fun render(paused: Boolean) {
         val width = Gdx.graphics.width.toFloat()
         val height = Gdx.graphics.height.toFloat()
         if (width <= 0f || height <= 0f) return
@@ -27,14 +27,18 @@ class TouchHudRenderer(private val inputState: InputState) : Disposable {
         Gdx.gl.glEnable(GL20.GL_BLEND)
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
 
-        drawFilledControls(width, height)
-        drawControlIcons(width, height)
+        drawFilledControls(width, height, paused)
+        drawControlIcons(width, height, paused)
     }
 
-    private fun drawFilledControls(width: Float, height: Float) {
+    private fun drawFilledControls(width: Float, height: Float, paused: Boolean) {
         shapes.begin(ShapeRenderer.ShapeType.Filled)
-        shapes.color = GameColors.UI_BACKGROUND
+        if (paused) {
+            shapes.color = GameColors.UI_BACKGROUND
+            shapes.rect(0f, 0f, width, height)
+        }
 
+        shapes.color = GameColors.UI_BACKGROUND
         TouchLayout.joystickCenter(height, center)
         val joystickX = center.x
         val joystickY = height - center.y
@@ -53,6 +57,7 @@ class TouchHudRenderer(private val inputState: InputState) : Disposable {
         drawButtonCircle(TouchLayout.jumpCenter(width, height, center), height)
         drawButtonCircle(TouchLayout.mineCenter(width, height, center), height)
         drawButtonCircle(TouchLayout.placeCenter(width, height, center), height)
+        drawButtonCircle(TouchLayout.pauseCenter(width, height, center), height)
         shapes.end()
     }
 
@@ -65,7 +70,7 @@ class TouchHudRenderer(private val inputState: InputState) : Disposable {
         )
     }
 
-    private fun drawControlIcons(width: Float, height: Float) {
+    private fun drawControlIcons(width: Float, height: Float, paused: Boolean) {
         Gdx.gl.glLineWidth(GameDimensions.HUD_LINE_WIDTH)
         shapes.begin(ShapeRenderer.ShapeType.Line)
         shapes.color = GameColors.UI_TEXT
@@ -91,6 +96,19 @@ class TouchHudRenderer(private val inputState: InputState) : Disposable {
         TouchLayout.placeCenter(width, height, center)
         val placeY = height - center.y
         shapes.rect(center.x - iconRadius, placeY - iconRadius, iconRadius * 2f, iconRadius * 2f)
+
+        TouchLayout.pauseCenter(width, height, center)
+        val pauseY = height - center.y
+        if (paused) {
+            shapes.triangle(
+                center.x - iconRadius * 0.6f, pauseY - iconRadius,
+                center.x - iconRadius * 0.6f, pauseY + iconRadius,
+                center.x + iconRadius, pauseY
+            )
+        } else {
+            shapes.line(center.x - iconRadius * 0.45f, pauseY - iconRadius, center.x - iconRadius * 0.45f, pauseY + iconRadius)
+            shapes.line(center.x + iconRadius * 0.45f, pauseY - iconRadius, center.x + iconRadius * 0.45f, pauseY + iconRadius)
+        }
 
         val crosshair = GameDimensions.CROSSHAIR_HALF_SIZE
         shapes.line(width * 0.5f - crosshair, height * 0.5f, width * 0.5f + crosshair, height * 0.5f)

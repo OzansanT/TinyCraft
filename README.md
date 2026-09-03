@@ -1,6 +1,6 @@
 # TinyCraft
 
-TinyCraft is a small Android-native voxel building game built with **Kotlin + libGDX**. The target loop is simple and mobile-first: explore, mine, collect, place, build, save, and continue.
+TinyCraft is a small Android-native voxel building game built with **Kotlin + libGDX**. The target loop is mobile-first: explore, mine, collect, place, build, save, and continue.
 
 ## Technical direction
 
@@ -9,11 +9,11 @@ TinyCraft is a small Android-native voxel building game built with **Kotlin + li
 - libGDX provides the game/rendering layer.
 - Android-specific integrations stay inside `android/`.
 - Game state and gameplay remain inside `core/`.
-- World data is chunk-based.
-- Base terrain is deterministic and seed-driven.
+- World data is chunk-based and base terrain is deterministic/seed-driven.
 - Player pose is owned by `PlayerState`; camera state is derived from it.
+- Inventory state is owned by `PlayerInventoryState`.
 - Rendering reads game state; rendering never owns or mutates authoritative gameplay state.
-- UI produces actions; UI does not directly mutate the world.
+- UI produces actions; UI does not directly mutate gameplay/world state.
 - Shared visual values live in root theme files instead of being duplicated.
 
 ## Current project map
@@ -30,39 +30,54 @@ TinyCraft/
 │       ├── input/
 │       │   ├── InputState.kt                 # Platform-neutral continuous/transient intents
 │       │   ├── GameInputController.kt        # Input component composition
-│       │   ├── TouchLayout.kt                # Shared control geometry
-│       │   ├── VirtualJoystickController.kt  # Left-thumb movement intent
-│       │   ├── TouchLookController.kt        # Right-side look intent
-│       │   ├── ActionButton.kt               # Input-only action button base
+│       │   ├── TouchLayout.kt                # Shared touch geometry
+│       │   ├── HotbarController.kt           # Slot tap -> selection intent
+│       │   ├── PauseButton.kt
+│       │   ├── VirtualJoystickController.kt
+│       │   ├── TouchLookController.kt
 │       │   ├── JumpButton.kt
 │       │   ├── MineButton.kt
 │       │   └── PlaceButton.kt
+│       ├── inventory/
+│       │   ├── ItemStack.kt                  # Immutable stack value + stack limit
+│       │   └── HotbarSelectionSystem.kt      # Selection intent -> inventory mutation
 │       ├── player/
 │       │   ├── PlayerState.kt                # Authoritative feet position/velocity/yaw/pitch
-│       │   ├── PlayerInventoryState.kt       # Selected build block ownership
+│       │   ├── PlayerInventoryState.kt       # Six-slot hotbar inventory
 │       │   ├── PlayerSpawnSystem.kt
 │       │   ├── PlayerMovementSystem.kt
 │       │   ├── PlayerLookSystem.kt
 │       │   ├── PlayerCameraController.kt
 │       │   ├── VoxelRaycaster.kt
-│       │   └── PlayerInteractionSystem.kt    # Mine/place world mutations
+│       │   └── PlayerInteractionSystem.kt    # Inventory-aware mine/place mutations
 │       ├── rendering/
-│       │   ├── BlockRenderPalette.kt         # Block ID -> centralized theme color
-│       │   ├── ChunkFaceBuilder.kt           # Visible-face extraction
-│       │   ├── ChunkMeshBuilder.kt           # Visible faces -> GPU mesh
-│       │   ├── ChunkRenderCache.kt           # Revision-based GPU mesh cache
-│       │   └── WorldRenderer.kt              # Shader/world presentation; consumes camera
+│       │   ├── BlockRenderPalette.kt
+│       │   ├── ChunkFaceBuilder.kt
+│       │   ├── ChunkMeshBuilder.kt
+│       │   ├── ChunkRenderCache.kt
+│       │   └── WorldRenderer.kt
+│       ├── save/
+│       │   ├── SaveData.kt                   # Versioned persistence schema
+│       │   ├── SaveCodec.kt                  # Deterministic text codec
+│       │   ├── SaveRepository.kt             # Storage boundary
+│       │   ├── LocalSaveRepository.kt        # libGDX local-file adapter
+│       │   └── GameSaveSystem.kt             # Capture/validate/restore
+│       ├── session/
+│       │   ├── GameSessionState.kt
+│       │   └── PauseSystem.kt
 │       ├── ui/
-│       │   └── TouchHudRenderer.kt            # Joystick/buttons/crosshair presentation only
-│       ├── screens/                          # System composition
+│       │   ├── TouchHudRenderer.kt
+│       │   └── hotbar/HotbarRenderer.kt
+│       ├── screens/                          # System composition only
 │       ├── theme/                            # Shared colors/dimensions/theme values
 │       └── world/
-│           ├── Chunk.kt                      # Compact block storage + mesh revision
+│           ├── Chunk.kt
 │           ├── ChunkPosition.kt
-│           ├── World.kt                      # World/chunk coordinate + surface queries
+│           ├── WorldModification.kt          # Player-authored generated-world override
+│           ├── World.kt
 │           └── generation/
-│               ├── TerrainNoise.kt           # Deterministic value noise
-│               └── WorldGenerator.kt         # Seeded terrain generation
+│               ├── TerrainNoise.kt
+│               └── WorldGenerator.kt
 ├── build.gradle
 ├── gradle.properties
 └── settings.gradle
@@ -105,13 +120,13 @@ Rendering         -> renderer/mesh file
 Constants         -> config/theme file
 ```
 
-Example for a future hotbar:
+Hotbar example:
 
 ```text
-ui/hotbar/Hotbar.kt
-ui/hotbar/HotbarSlot.kt
+input/HotbarController.kt
+inventory/HotbarSelectionSystem.kt
+player/PlayerInventoryState.kt
 ui/hotbar/HotbarRenderer.kt
-ui/hotbar/HotbarController.kt
 ```
 
 A button may have its own component file, but its gameplay logic must not live inside the button.
@@ -121,13 +136,21 @@ A button may have its own component file, but its gameplay logic must not live i
 Correct flow:
 
 ```text
-MineButton -> GameAction.MINE -> InputState -> PlayerInteractionSystem -> World -> chunk revision -> renderer cache rebuild
+MineButton
+-> GameAction.MINE
+-> InputState
+-> PlayerInteractionSystem
+-> PlayerInventoryState + World
+-> chunk revision
+-> renderer cache rebuild
 ```
 
 Incorrect flow:
 
 ```text
 MineButton -> World.setBlock(...)
+HotbarController -> inventory.selectSlot(...)
+PauseButton -> write save file
 ```
 
 UI is responsible for presentation and intent only.
@@ -142,7 +165,7 @@ theme/GameDimensions.kt
 theme/GameTheme.kt
 ```
 
-Do not scatter arbitrary UI colors, HUD sizes, joystick sizes, paddings, or common dimensions across feature files.
+Do not scatter arbitrary UI colors, HUD sizes, joystick sizes, hotbar sizes, paddings, or common dimensions across feature files.
 
 A new globally reused color must be added to `GameColors.kt` first.
 
@@ -177,6 +200,7 @@ Block -> Android Activity
 World -> Android platform code
 Renderer -> authoritative World mutation
 Button -> direct World mutation
+UI -> SaveRepository file I/O
 ```
 
 Lower-level world/data code must not know about higher-level UI or Android platform code.
@@ -189,11 +213,11 @@ Lower-level world/data code must not know about higher-level UI or Android platf
 - billing
 - advertisements
 - Android haptics
-- platform storage adapters
-- permissions
-- Android lifecycle integration
+- Android-only permissions/lifecycle services
 
-Core movement, blocks, chunks, terrain, inventory, combat, entities, and rendering rules belong in `core/`.
+Core movement, blocks, chunks, terrain, inventory, save schema, combat, entities, and rendering rules belong in `core/`.
+
+Platform-neutral libGDX local storage may be adapted behind `SaveRepository`; gameplay/UI must never access files directly.
 
 ## 8. One owner for each piece of state
 
@@ -203,8 +227,10 @@ Examples:
 
 - Player position/yaw/pitch -> `PlayerState`
 - Blocks -> `Chunk` / `World`
-- Selected build block -> `PlayerInventoryState`
-- Continuous touch intent -> `InputState`
+- Six hotbar slots + selected slot -> `PlayerInventoryState`
+- Pause state -> `GameSessionState`
+- Continuous/transient input intent -> `InputState`
+- Encoded local save file -> `SaveRepository`
 
 Do not duplicate the same mutable state in several screens/controllers and attempt to synchronize it manually.
 
@@ -230,7 +256,7 @@ Gameplay/world mutation
 -> chunk GPU mesh replaced
 ```
 
-A renderer must never reset a dirty flag on gameplay data to declare itself synchronized.
+A renderer must never reset gameplay data merely to declare itself synchronized.
 
 ## 11. Blocks use a registry
 
@@ -251,11 +277,11 @@ Future block metadata can include:
 
 ## 12. Input is action-based
 
-Touch controls, keyboard controls, gamepads, or future platform controls should resolve to platform-neutral `GameAction` values and shared `InputState` intent.
+Touch controls, keyboard controls, gamepads, or future platform controls resolve to platform-neutral `GameAction` values and shared `InputState` intent.
 
-Gameplay must not care whether `MINE` came from a touchscreen button, mouse, keyboard, or controller.
+Gameplay must not care whether `MINE`, `PAUSE`, or hotbar selection came from touchscreen, mouse, keyboard, or controller.
 
-Input components may claim touches and update input intent; they may not implement movement, mining, placement, or world mutation themselves.
+Input components may claim touches and update intent; they may not implement movement, mining, placement, inventory mutation, save I/O, or world mutation themselves.
 
 ## 13. Asset organization
 
@@ -282,28 +308,31 @@ As asset count grows, introduce an `AssetRegistry` and stop referencing repeated
 
 ## 14. Save files are versioned
 
-Every persistent world/save format must include a save version from its first implementation.
-
-Future structure should include at minimum:
+Every persistent save contains:
 
 ```text
-version
-worldSeed
+SAVE_VERSION
 generationVersion
-player
-chunks/world modifications
-inventory
+worldSeed
+player position/yaw/pitch
+selected hotbar slot
+non-empty hotbar stacks
+player-authored world modifications
 ```
 
-Never change serialized save structure without considering migration/backward compatibility.
+`GameSaveSystem` must reject incompatible versions rather than partially loading them.
+
+`SaveCodec` owns serialization syntax. `SaveRepository` owns storage. Gameplay/UI must not parse or write save files directly.
+
+Never change serialized save structure without considering migration/backward compatibility and updating `SAVE_VERSION` when appropriate.
 
 ## 15. World generation must be deterministic
 
-World generation must be seed-driven. The same seed and generation version must produce the same base terrain.
+The same seed and generation version must produce the same base terrain.
 
 Do not use uncontrolled global random calls for persistent terrain generation.
 
-Persistent player edits should eventually be stored as modifications layered over generated base terrain rather than requiring the full untouched world to be serialized.
+Persistent saves store player-authored block overrides layered over regenerated base terrain; untouched generated chunks are not serialized.
 
 ## 16. Performance rules
 
@@ -316,7 +345,8 @@ Do not:
 - render internal block faces;
 - allocate avoidable temporary objects every frame;
 - bind gameplay simulation speed directly to frame rate;
-- use unlimited render distance/entity counts.
+- use unlimited render distance/entity counts;
+- serialize the complete untouched generated world.
 
 Prefer:
 
@@ -325,6 +355,7 @@ Prefer:
 - visible-face culling;
 - reusable temporary math objects where appropriate;
 - bounded frame delta for movement simulation;
+- deterministic base terrain + compact modification saves;
 - explicit mobile budgets.
 
 ## 17. File growth rule
@@ -363,13 +394,13 @@ Project/library versions belong in `gradle.properties` or a future version catal
 
 ## 21. Changes must remain build-oriented
 
-Do not knowingly leave unresolved imports, duplicate class names, broken package paths, or placeholder calls to nonexistent APIs on merged branches.
+Do not knowingly leave unresolved imports, duplicate class names, broken package paths, stale renamed APIs, or placeholder calls to nonexistent APIs on merged branches.
 
 If a feature is intentionally incomplete, keep the incomplete portion isolated behind a compilable interface/stub and document the next step.
 
 ## 22. Tests accompany foundational logic
 
-Pure data structures, deterministic generation, visibility/culling rules, input state, raycasts, and gameplay logic should gain unit tests as they are introduced. Renderer/device behavior can use later integration/device tests.
+Pure data structures, deterministic generation, visibility/culling rules, inventory mutation, persistence codecs, raycasts, input state, and gameplay logic should gain unit tests as they are introduced. Renderer/device behavior can use integration/device tests later.
 
 ## 23. Commit/PR scope
 
@@ -377,7 +408,7 @@ Prefer coherent development slices. A PR should implement one architectural laye
 
 ## 24. Architecture principle
 
-> **UI displays and produces actions. Systems perform gameplay. Models own state. Renderers render. Platform code handles Android. One layer must not absorb another layer's responsibilities.**
+> **UI displays and produces actions. Systems perform gameplay. Models own state. Renderers render. Persistence captures state. Platform adapters handle external services. One layer must not absorb another layer's responsibilities.**
 
 # Milestones
 
@@ -412,19 +443,38 @@ Prefer coherent development slices. A PR should implement one architectural laye
 - Right-side touch look
 - Left virtual movement joystick
 - Separate Jump, Mine and Place input components
-- Shared touch layout for rendering/hit testing
-- Touch HUD with joystick, action icons and crosshair
+- Shared touch layout
+- Touch HUD + crosshair
 - Voxel raycast targeting
-- Raycast-driven mining and placement through gameplay systems
-- Input reset when the game screen deactivates
-- Tests for input state, look, movement/jump and raycast targeting
+- Raycast-driven mining/placement
+- Tests for input, look, movement/jump and raycasts
 
-## Next milestone: 0.4 inventory + save/load
+## 0.4 Inventory + versioned save/load — complete
 
-1. Add six-slot hotbar state and selected-slot actions.
-2. Replace temporary selected-build-block state with inventory-owned item stacks.
-3. Add block collection on mining and consumption on placement.
-4. Add versioned player/world save data using existing `SAVE_VERSION` and `GENERATION_VERSION`.
-5. Persist player pose, hotbar/inventory and player-made block modifications.
-6. Add pause/save flow without putting storage logic in UI components.
-7. Add round-trip unit tests for save compatibility and inventory mutations.
+- Six-slot hotbar state
+- Tap-to-select hotbar controller
+- Immutable block item stacks with a 64-item stack limit
+- Mining collects solid blocks into inventory
+- Full inventory prevents destructive block loss
+- Placement consumes one selected block
+- Colored hotbar rendering with item counts
+- Pause/resume button and pause session state
+- Autosave when pausing, hiding, or disposing the game screen
+- Versioned save schema and deterministic text codec
+- Local save repository behind a storage interface
+- Saved player pose and selected hotbar slot
+- Saved hotbar contents
+- Saved player-authored block modifications over deterministic terrain
+- Compatibility validation using `SAVE_VERSION` + `GENERATION_VERSION`
+- Round-trip tests for inventory, saves, world edits and interaction consumption
+
+## Next milestone: 0.5 voxel collision + chunk streaming
+
+1. Replace surface-only horizontal movement checks with player AABB voxel collision.
+2. Add axis-separated collision resolution for walls, ceilings, floors, and jumping.
+3. Keep step-up behavior explicit and bounded by `MAX_STEP_HEIGHT`.
+4. Add player-centered chunk loading/unloading rather than a permanently fixed 3x3 world.
+5. Generate newly entered chunks deterministically from the active world seed.
+6. Re-apply saved world modifications when streamed chunks load.
+7. Dispose GPU meshes when chunks unload.
+8. Add collision and chunk-boundary/streaming tests before expanding gameplay further.
