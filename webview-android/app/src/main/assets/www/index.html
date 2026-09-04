@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MiniCraft Web Game</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <div class="toolbar">
+      <div class="instructions">
+        <span class="badge">WASD: Move</span>
+        <span class="badge">Drag: Rotate</span>
+        <span class="badge">Click: Mine</span>
+        <span class="badge">Shift + Click: Place</span>
+      </div>
+      <button id="resetButton" type="button">Generate New World</button>
+    </div>
+
+    <div class="block-picker">
+      <button type="button" data-block="grass" class="block-choice active">1 · Grass</button>
+      <button type="button" data-block="dirt" class="block-choice">2 · Dirt</button>
+      <button type="button" data-block="stone" class="block-choice">3 · Stone</button>
+    </div>
+
+    <section id="gameFrame" class="game-frame">
+      <canvas id="gameCanvas" aria-label="Interactive block-building game"></canvas>
+
+      <div class="hud">
+        <div>Selected: <strong id="selectedLabel">Grass</strong></div>
+        <div>Blocks: <strong id="blockCount">0</strong></div>
+        <div>Position: <strong id="positionLabel">0, 0</strong></div>
+      </div>
+
+      <div id="message" class="message" aria-live="polite">
+        Click a block to start mining.
+      </div>
+    </section>
+
+    <p class="help">
+      Keyboard shortcuts: 1, 2 and 3 change the selected block. The player automatically walks on top of the terrain.
+    </p>
+  </main>
+
+  <script type="module" src="game.js"></script>
+</body>
+</html>
