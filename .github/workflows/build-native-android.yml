@@ -43,7 +43,7 @@ jobs:
       - name: Upload APK immediately
         uses: actions/upload-artifact@v4
         with:
-          name: TinyCraft-0.2.2-native-canvasfix-apk
+          name: TinyCraft-0.2.4-fullscreen-swipe-controls-apk
           path: native-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
@@ -58,7 +58,7 @@ jobs:
           script: |
             adb logcat -c
             adb install -r "$GITHUB_WORKSPACE/native-android/app/build/outputs/apk/debug/app-debug.apk"
-            adb shell am start -W -n com.tinycraft.nativeandroid/.MainActivity
+            adb shell am start -W -n com.tinycraft.nativeandroid.canvasfix/com.tinycraft.nativeandroid.MainActivity
             sleep 6
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/tinycraft-screen.png"
             adb logcat -d > "$GITHUB_WORKSPACE/tinycraft-logcat.txt"
@@ -70,7 +70,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TinyCraft-0.2.2-native-canvasfix-evidence
+          name: TinyCraft-0.2.4-fullscreen-swipe-controls-evidence
           path: |
             tinycraft-screen.png
             tinycraft-logcat.txt
