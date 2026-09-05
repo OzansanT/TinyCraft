@@ -1,0 +1,51 @@
+name: Build TinyCraft Native Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - native-android-exact-ui
+    paths:
+      - "native-android/**"
+      - ".github/workflows/build-native-android.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: native-android
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build native debug APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK contains no web runtime assets
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          if unzip -l "$APK" | grep -E '\.(html|css|js)$|three\.module|WebView|libgdx|badlogic' ; then
+            echo "Unexpected web/libGDX runtime content found in native APK"
+            exit 1
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TinyCraft-native-android-apk
+          path: native-android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
