@@ -25,7 +25,10 @@ import kotlin.math.roundToInt
 class MainActivity : Activity(), GameUiListener {
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private lateinit var gameSurface: GameSurfaceView
+    private lateinit var gameHost: FrameLayout
+    private var gpuSurface: GpuGameView? = null
+    private var canvasSurface: GameSurfaceView? = null
+
     private lateinit var selectedLabel: TextView
     private lateinit var blockCountLabel: TextView
     private lateinit var positionLabel: TextView
@@ -40,7 +43,6 @@ class MainActivity : Activity(), GameUiListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         try {
             buildUi()
             enterImmersiveMode()
@@ -51,12 +53,14 @@ class MainActivity : Activity(), GameUiListener {
 
     override fun onResume() {
         super.onResume()
-        if (::gameSurface.isInitialized) gameSurface.onResume()
+        gpuSurface?.onResumeGame()
+        canvasSurface?.onResume()
         enterImmersiveMode()
     }
 
     override fun onPause() {
-        if (::gameSurface.isInitialized) gameSurface.onPause()
+        gpuSurface?.onPauseGame()
+        canvasSurface?.onPause()
         super.onPause()
     }
 
@@ -78,11 +82,23 @@ class MainActivity : Activity(), GameUiListener {
             setBackgroundColor(Color.rgb(143, 199, 232))
         }
 
-        gameSurface = GameSurfaceView(this, this).apply {
+        gameHost = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(143, 199, 232))
         }
         root.addView(
-            gameSurface,
+            gameHost,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val gpu = GpuGameView(this, this) { error ->
+            switchToCanvasFallback(error)
+        }
+        gpuSurface = gpu
+        gameHost.addView(
+            gpu,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -134,9 +150,7 @@ class MainActivity : Activity(), GameUiListener {
             }
         )
 
-        controlsOverlay = buildControlsOverlay().apply {
-            visibility = View.GONE
-        }
+        controlsOverlay = buildControlsOverlay().apply { visibility = View.GONE }
         root.addView(
             controlsOverlay,
             FrameLayout.LayoutParams(
@@ -152,7 +166,31 @@ class MainActivity : Activity(), GameUiListener {
 
         setContentView(root)
         updatePicker(BlockType.GRASS)
-        gameSurface.requestFocus()
+        gpu.requestFocus()
+    }
+
+    private fun switchToCanvasFallback(error: Throwable) {
+        mainHandler.post {
+            if (canvasSurface != null || !::gameHost.isInitialized) return@post
+            val oldGpu = gpuSurface
+            gpuSurface = null
+            oldGpu?.let { gameHost.removeView(it) }
+
+            val fallback = GameSurfaceView(this, this).apply {
+                setBackgroundColor(Color.rgb(143, 199, 232))
+                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+            }
+            canvasSurface = fallback
+            gameHost.addView(
+                fallback,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+            fallback.requestFocus()
+            onMessage("GPU compatibility mode enabled (${error.javaClass.simpleName}).")
+        }
     }
 
     private fun buildControlsOverlay(): LinearLayout {
@@ -192,15 +230,15 @@ class MainActivity : Activity(), GameUiListener {
         stoneButton = makeControlButton("Stone", 88)
 
         grassButton.setOnClickListener {
-            gameSurface.select(BlockType.GRASS)
+            selectGame(BlockType.GRASS)
             scheduleControlsHide()
         }
         dirtButton.setOnClickListener {
-            gameSurface.select(BlockType.DIRT)
+            selectGame(BlockType.DIRT)
             scheduleControlsHide()
         }
         stoneButton.setOnClickListener {
-            gameSurface.select(BlockType.STONE)
+            selectGame(BlockType.STONE)
             scheduleControlsHide()
         }
 
@@ -212,15 +250,21 @@ class MainActivity : Activity(), GameUiListener {
             topMargin = dp(6)
         })
         panel.addView(blocks)
-
         return panel
     }
 
-    private fun dpadButtonParams(gravity: Int) = FrameLayout.LayoutParams(
-        dp(50),
-        dp(50),
-        gravity
-    )
+    private fun dpadButtonParams(gravity: Int) = FrameLayout.LayoutParams(dp(50), dp(50), gravity)
+
+    private fun selectGame(type: BlockType) {
+        gpuSurface?.select(type) ?: canvasSurface?.select(type)
+    }
+
+    private fun moveGame(keyCode: Int) {
+        gpuSurface?.moveKey(keyCode)?.let { return }
+        val fallback = canvasSurface ?: return
+        val now = SystemClock.uptimeMillis()
+        fallback.onKeyDown(keyCode, KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+    }
 
     private fun bindMovement(button: Button, keyCode: Int) {
         var repeat: Runnable? = null
@@ -230,13 +274,8 @@ class MainActivity : Activity(), GameUiListener {
                     autoHideControls?.let(mainHandler::removeCallbacks)
                     val action = object : Runnable {
                         override fun run() {
-                            if (!::gameSurface.isInitialized) return
-                            val now = SystemClock.uptimeMillis()
-                            gameSurface.onKeyDown(
-                                keyCode,
-                                KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0)
-                            )
-                            mainHandler.postDelayed(this, 90)
+                            moveGame(keyCode)
+                            mainHandler.postDelayed(this, 45)
                         }
                     }
                     repeat = action
@@ -257,16 +296,14 @@ class MainActivity : Activity(), GameUiListener {
     }
 
     private fun showControls() {
-        if (!::controlsOverlay.isInitialized) return
         autoHideControls?.let(mainHandler::removeCallbacks)
-        controlsOverlay.visibility = View.VISIBLE
+        if (::controlsOverlay.isInitialized) controlsOverlay.visibility = View.VISIBLE
         scheduleControlsHide()
     }
 
     private fun hideControls() {
-        if (!::controlsOverlay.isInitialized) return
         autoHideControls?.let(mainHandler::removeCallbacks)
-        controlsOverlay.visibility = View.GONE
+        if (::controlsOverlay.isInitialized) controlsOverlay.visibility = View.GONE
     }
 
     private fun scheduleControlsHide() {
@@ -332,9 +369,7 @@ class MainActivity : Activity(), GameUiListener {
             messageReset?.let(mainHandler::removeCallbacks)
             messageLabel.text = text
             val reset = Runnable {
-                if (::messageLabel.isInitialized) {
-                    messageLabel.text = "Swipe up from the lower screen for controls."
-                }
+                if (::messageLabel.isInitialized) messageLabel.text = "Swipe up from the lower screen for controls."
             }
             messageReset = reset
             mainHandler.postDelayed(reset, 2400)
@@ -382,11 +417,8 @@ class MainActivity : Activity(), GameUiListener {
         if (stroke != null && strokeDp > 0) setStroke(dp(strokeDp), stroke)
     }
 
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).roundToInt()
-
-    private fun dp(value: Float): Int =
-        (value * resources.displayMetrics.density).roundToInt()
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
+    private fun dp(value: Float): Int = (value * resources.displayMetrics.density).roundToInt()
 }
 
 private class SwipeRevealLayout(
@@ -408,7 +440,6 @@ private class SwipeRevealLayout(
                     eligible = event.y >= height * 0.55f
                     triggered = false
                 }
-
                 MotionEvent.ACTION_MOVE -> {
                     if (!triggered) {
                         val dx = event.x - startX
@@ -422,7 +453,6 @@ private class SwipeRevealLayout(
                         }
                     }
                 }
-
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     eligible = false
                     triggered = false
