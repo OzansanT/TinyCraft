@@ -8,7 +8,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.tinycraft.nativeandroid.canvasfix"
+        applicationId = "com.tinycraft.nativeandroid.fullscreen"
         minSdk = 26
         targetSdk = 35
         versionCode = 6
