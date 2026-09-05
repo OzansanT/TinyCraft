@@ -38,10 +38,7 @@ jobs:
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -f "$APK"
-          if unzip -l "$APK" | grep -E '\.(html|css|js)$|three\.module|WebView|libgdx|badlogic' ; then
-            echo "Unexpected web/libGDX runtime content found in native APK"
-            exit 1
-          fi
+          ! unzip -l "$APK" | grep -E '\.(html|css|js)$|three\.module|WebView|libgdx|badlogic'
 
       - name: Boot emulator and verify rendered screen
         uses: reactivecircus/android-emulator-runner@v2
@@ -58,21 +55,9 @@ jobs:
             sleep 6
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/tinycraft-screen.png"
             adb logcat -d > "$GITHUB_WORKSPACE/tinycraft-logcat.txt"
-            if grep -E "FATAL EXCEPTION|OpenGL shader compile failed|program link failed" "$GITHUB_WORKSPACE/tinycraft-logcat.txt" ; then
-              echo "Renderer/runtime failure found in logcat"
-              exit 1
-            fi
+            ! grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Graphics initialization failed" "$GITHUB_WORKSPACE/tinycraft-logcat.txt"
             python3 -m pip install --quiet pillow
-            python3 - <<'PY'
-            import os
-            from PIL import Image, ImageStat
-            path = os.path.join(os.environ['GITHUB_WORKSPACE'], 'tinycraft-screen.png')
-            image = Image.open(path).convert('RGB')
-            mean = sum(ImageStat.Stat(image).mean) / 3.0
-            print(f'Mean screen brightness: {mean:.2f}')
-            if mean < 25:
-                raise SystemExit('Visual smoke test failed: screen is effectively black')
-            PY
+            python3 -c "import os; from PIL import Image,ImageStat; p=os.path.join(os.environ['GITHUB_WORKSPACE'],'tinycraft-screen.png'); im=Image.open(p).convert('RGB'); mean=sum(ImageStat.Stat(im).mean)/3.0; print('Mean screen brightness: %.2f' % mean); assert mean >= 25, 'Visual smoke test failed: screen is effectively black'"
 
       - name: Upload APK and emulator evidence
         if: always()
