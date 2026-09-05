@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -15,8 +14,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowInsets
-import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -37,24 +35,28 @@ class MainActivity : Activity(), GameUiListener {
     private lateinit var dirtButton: Button
     private lateinit var stoneButton: Button
 
-    private lateinit var messageLayoutParams: FrameLayout.LayoutParams
     private var messageReset: Runnable? = null
     private var autoHideControls: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enterImmersiveMode()
-        buildUi()
+
+        try {
+            buildUi()
+            enterImmersiveMode()
+        } catch (error: Throwable) {
+            showStartupFallback(error)
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        if (::gameSurface.isInitialized) gameSurface.onResume()
         enterImmersiveMode()
-        gameSurface.onResume()
     }
 
     override fun onPause() {
-        gameSurface.onPause()
+        if (::gameSurface.isInitialized) gameSurface.onPause()
         super.onPause()
     }
 
@@ -119,20 +121,8 @@ class MainActivity : Activity(), GameUiListener {
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = rounded(Color.argb(158, 0, 0, 0), 10f)
         }
-        messageLayoutParams = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-        ).apply {
-            leftMargin = dp(12)
-            rightMargin = dp(12)
-            bottomMargin = dp(22)
-        }
-        root.addView(messageLabel, messageLayoutParams)
-
-        controlsOverlay = buildControlsOverlay()
         root.addView(
-            controlsOverlay,
+            messageLabel,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -140,11 +130,25 @@ class MainActivity : Activity(), GameUiListener {
             ).apply {
                 leftMargin = dp(12)
                 rightMargin = dp(12)
+                bottomMargin = dp(22)
+            }
+        )
+
+        controlsOverlay = buildControlsOverlay().apply {
+            visibility = View.GONE
+        }
+        root.addView(
+            controlsOverlay,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            ).apply {
+                leftMargin = dp(8)
+                rightMargin = dp(8)
                 bottomMargin = dp(14)
             }
         )
-        controlsOverlay.visibility = View.GONE
-        controlsOverlay.alpha = 0f
 
         setContentView(root)
         updatePicker(BlockType.GRASS)
@@ -155,16 +159,12 @@ class MainActivity : Activity(), GameUiListener {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
             background = rounded(Color.argb(218, 23, 29, 34), 14f, UiPalette.border, 1)
         }
 
         val dpad = FrameLayout(this)
-        val dpadSize = dp(162)
-        panel.addView(
-            dpad,
-            LinearLayout.LayoutParams(dpadSize, dp(136))
-        )
+        panel.addView(dpad, LinearLayout.LayoutParams(dp(154), dp(128)))
 
         val up = makeControlButton("▲")
         val left = makeControlButton("◀")
@@ -181,25 +181,15 @@ class MainActivity : Activity(), GameUiListener {
         bindMovement(down, KeyEvent.KEYCODE_S)
         bindMovement(right, KeyEvent.KEYCODE_D)
 
-        val divider = View(this).apply {
-            setBackgroundColor(Color.argb(90, 255, 255, 255))
-        }
-        panel.addView(
-            divider,
-            LinearLayout.LayoutParams(dp(1), dp(118)).apply {
-                leftMargin = dp(14)
-                rightMargin = dp(14)
-            }
-        )
-
         val blocks = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            setPadding(dp(10), 0, 0, 0)
         }
 
-        grassButton = makeControlButton("Grass", 96)
-        dirtButton = makeControlButton("Dirt", 96)
-        stoneButton = makeControlButton("Stone", 96)
+        grassButton = makeControlButton("Grass", 88)
+        dirtButton = makeControlButton("Dirt", 88)
+        stoneButton = makeControlButton("Stone", 88)
 
         grassButton.setOnClickListener {
             gameSurface.select(BlockType.GRASS)
@@ -215,11 +205,11 @@ class MainActivity : Activity(), GameUiListener {
         }
 
         blocks.addView(grassButton)
-        blocks.addView(dirtButton, LinearLayout.LayoutParams(dp(96), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(7)
+        blocks.addView(dirtButton, LinearLayout.LayoutParams(dp(88), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(6)
         })
-        blocks.addView(stoneButton, LinearLayout.LayoutParams(dp(96), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(7)
+        blocks.addView(stoneButton, LinearLayout.LayoutParams(dp(88), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(6)
         })
         panel.addView(blocks)
 
@@ -227,8 +217,8 @@ class MainActivity : Activity(), GameUiListener {
     }
 
     private fun dpadButtonParams(gravity: Int) = FrameLayout.LayoutParams(
-        dp(52),
-        dp(52),
+        dp(50),
+        dp(50),
         gravity
     )
 
@@ -240,12 +230,13 @@ class MainActivity : Activity(), GameUiListener {
                     autoHideControls?.let(mainHandler::removeCallbacks)
                     val action = object : Runnable {
                         override fun run() {
+                            if (!::gameSurface.isInitialized) return
                             val now = SystemClock.uptimeMillis()
                             gameSurface.onKeyDown(
                                 keyCode,
                                 KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0)
                             )
-                            mainHandler.postDelayed(this, 85)
+                            mainHandler.postDelayed(this, 90)
                         }
                     }
                     repeat = action
@@ -268,39 +259,14 @@ class MainActivity : Activity(), GameUiListener {
     private fun showControls() {
         if (!::controlsOverlay.isInitialized) return
         autoHideControls?.let(mainHandler::removeCallbacks)
-
-        if (controlsOverlay.visibility != View.VISIBLE) {
-            controlsOverlay.visibility = View.VISIBLE
-            controlsOverlay.alpha = 0f
-            controlsOverlay.translationY = dp(36).toFloat()
-            controlsOverlay.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(180)
-                .start()
-        }
-
-        messageLayoutParams.bottomMargin = dp(174)
-        messageLabel.layoutParams = messageLayoutParams
+        controlsOverlay.visibility = View.VISIBLE
         scheduleControlsHide()
     }
 
     private fun hideControls() {
-        if (!::controlsOverlay.isInitialized || controlsOverlay.visibility != View.VISIBLE) return
+        if (!::controlsOverlay.isInitialized) return
         autoHideControls?.let(mainHandler::removeCallbacks)
-
-        controlsOverlay.animate()
-            .alpha(0f)
-            .translationY(dp(36).toFloat())
-            .setDuration(150)
-            .withEndAction {
-                controlsOverlay.visibility = View.GONE
-                controlsOverlay.translationY = 0f
-            }
-            .start()
-
-        messageLayoutParams.bottomMargin = dp(22)
-        messageLabel.layoutParams = messageLayoutParams
+        controlsOverlay.visibility = View.GONE
     }
 
     private fun scheduleControlsHide() {
@@ -352,6 +318,7 @@ class MainActivity : Activity(), GameUiListener {
 
     override fun onHud(selected: BlockType, blockCount: Int, playerX: Int, playerZ: Int) {
         mainHandler.post {
+            if (!::selectedLabel.isInitialized) return@post
             selectedLabel.text = "Selected: ${selected.label}"
             blockCountLabel.text = "Blocks: $blockCount"
             positionLabel.text = "Position: $playerX, $playerZ"
@@ -361,10 +328,13 @@ class MainActivity : Activity(), GameUiListener {
 
     override fun onMessage(text: String) {
         mainHandler.post {
+            if (!::messageLabel.isInitialized) return@post
             messageReset?.let(mainHandler::removeCallbacks)
             messageLabel.text = text
             val reset = Runnable {
-                messageLabel.text = "Swipe up from the lower screen for controls."
+                if (::messageLabel.isInitialized) {
+                    messageLabel.text = "Swipe up from the lower screen for controls."
+                }
             }
             messageReset = reset
             mainHandler.postDelayed(reset, 2400)
@@ -372,14 +342,8 @@ class MainActivity : Activity(), GameUiListener {
     }
 
     private fun enterImmersiveMode() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(false)
-            window.insetsController?.let { controller ->
-                controller.hide(WindowInsets.Type.systemBars())
-                controller.systemBarsBehavior =
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
-        } else {
+        try {
+            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             @Suppress("DEPRECATION")
             window.decorView.systemUiVisibility = (
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
@@ -389,7 +353,21 @@ class MainActivity : Activity(), GameUiListener {
                     or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                     or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 )
+        } catch (_: Throwable) {
+            // Theme already requests fullscreen; never crash over system bars.
         }
+    }
+
+    private fun showStartupFallback(error: Throwable) {
+        val text = TextView(this).apply {
+            setBackgroundColor(Color.rgb(143, 199, 232))
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+            text = "TinyCraft could not initialize.\n${error.javaClass.simpleName}"
+        }
+        setContentView(text)
     }
 
     private fun rounded(
@@ -419,35 +397,39 @@ private class SwipeRevealLayout(
     private var startY = 0f
     private var eligible = false
     private var triggered = false
-    private val threshold = 84f * resources.displayMetrics.density
+    private val threshold = 72f * resources.displayMetrics.density
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                startX = event.x
-                startY = event.y
-                eligible = event.y >= height * 0.55f
-                triggered = false
-            }
+        try {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    startX = event.x
+                    startY = event.y
+                    eligible = event.y >= height * 0.55f
+                    triggered = false
+                }
 
-            MotionEvent.ACTION_MOVE -> {
-                if (!triggered) {
-                    val dx = event.x - startX
-                    val dy = event.y - startY
-                    if (eligible && dy < -threshold && abs(dy) > abs(dx) * 1.15f) {
-                        triggered = true
-                        onSwipe(true)
-                    } else if (dy > threshold && abs(dy) > abs(dx) * 1.15f) {
-                        triggered = true
-                        onSwipe(false)
+                MotionEvent.ACTION_MOVE -> {
+                    if (!triggered) {
+                        val dx = event.x - startX
+                        val dy = event.y - startY
+                        if (eligible && dy < -threshold && abs(dy) > abs(dx) * 1.15f) {
+                            triggered = true
+                            onSwipe(true)
+                        } else if (dy > threshold && abs(dy) > abs(dx) * 1.15f) {
+                            triggered = true
+                            onSwipe(false)
+                        }
                     }
                 }
-            }
 
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                eligible = false
-                triggered = false
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    eligible = false
+                    triggered = false
+                }
             }
+        } catch (_: Throwable) {
+            // Gesture recognition must never terminate gameplay.
         }
         return super.dispatchTouchEvent(event)
     }
