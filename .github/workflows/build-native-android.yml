@@ -7,6 +7,7 @@ on:
       - native-android-exact-ui
     paths:
       - "native-android/**"
+      - "ci/tinycraft-debug.keystore.b64"
       - ".github/workflows/build-native-android.yml"
 
 jobs:
@@ -30,6 +31,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+
+      - name: Install stable test signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          base64 --decode "$GITHUB_WORKSPACE/ci/tinycraft-debug.keystore.b64" > "$HOME/.android/debug.keystore"
+          test -s "$HOME/.android/debug.keystore"
 
       - name: Build native debug APK
         run: gradle :app:assembleDebug --stacktrace
@@ -58,7 +65,7 @@ jobs:
           script: |
             adb logcat -c
             adb install -r "$GITHUB_WORKSPACE/native-android/app/build/outputs/apk/debug/app-debug.apk"
-            adb shell am start -W -n com.tinycraft.nativeandroid.canvasfix/com.tinycraft.nativeandroid.MainActivity
+            adb shell am start -W -n com.tinycraft.nativeandroid.fullscreen/com.tinycraft.nativeandroid.MainActivity
             sleep 6
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/tinycraft-screen.png"
             adb logcat -d > "$GITHUB_WORKSPACE/tinycraft-logcat.txt"
