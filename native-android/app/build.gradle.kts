@@ -11,8 +11,8 @@ android {
         applicationId = "com.tinycraft.nativeandroid.fullscreen"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.2.4-fullscreen-swipe-controls"
+        versionCode = 7
+        versionName = "0.2.5-fullscreen-crashfix"
     }
 
     buildTypes {
