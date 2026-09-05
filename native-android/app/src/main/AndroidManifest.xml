@@ -3,7 +3,7 @@
 
     <application
         android:allowBackup="true"
-        android:hardwareAccelerated="true"
+        android:hardwareAccelerated="false"
         android:label="TinyCraft"
         android:supportsRtl="true"
         android:theme="@style/Theme.TinyCraft.Native">
