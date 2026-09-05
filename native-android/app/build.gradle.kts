@@ -8,11 +8,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.tinycraft.nativeandroid"
+        applicationId = "com.tinycraft.nativeandroid.canvasfix"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.2.2-native-canvasfix"
+        versionCode = 5
+        versionName = "0.2.3-native-canvasfix-uniqueid"
     }
 
     buildTypes {
