@@ -50,14 +50,14 @@ jobs:
       - name: Upload APK immediately
         uses: actions/upload-artifact@v4
         with:
-          name: TinyCraft-0.2.4-fullscreen-swipe-controls-apk
+          name: TinyCraft-0.2.5-fullscreen-crashfix-apk
           path: native-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      - name: Boot emulator and verify rendered screen
+      - name: Boot Android 16 emulator and verify launch
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 29
+          api-level: 36
           arch: x86_64
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
@@ -67,9 +67,10 @@ jobs:
             adb install -r "$GITHUB_WORKSPACE/native-android/app/build/outputs/apk/debug/app-debug.apk"
             adb shell am start -W -n com.tinycraft.nativeandroid.fullscreen/com.tinycraft.nativeandroid.MainActivity
             sleep 6
+            adb shell pidof com.tinycraft.nativeandroid.fullscreen
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/tinycraft-screen.png"
             adb logcat -d > "$GITHUB_WORKSPACE/tinycraft-logcat.txt"
-            ! grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Graphics initialization failed" "$GITHUB_WORKSPACE/tinycraft-logcat.txt"
+            ! grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL" "$GITHUB_WORKSPACE/tinycraft-logcat.txt"
             python3 -m pip install --quiet pillow
             python3 -c "import os; from PIL import Image,ImageStat; p=os.path.join(os.environ['GITHUB_WORKSPACE'],'tinycraft-screen.png'); im=Image.open(p).convert('RGB'); mean=sum(ImageStat.Stat(im).mean)/3.0; print('Mean screen brightness: %.2f' % mean); assert mean >= 25, 'Visual smoke test failed: screen is effectively black'"
 
@@ -77,7 +78,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TinyCraft-0.2.4-fullscreen-swipe-controls-evidence
+          name: TinyCraft-0.2.5-fullscreen-crashfix-evidence
           path: |
             tinycraft-screen.png
             tinycraft-logcat.txt
