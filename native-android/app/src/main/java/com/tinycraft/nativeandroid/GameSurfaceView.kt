@@ -13,7 +13,7 @@ class GameSurfaceView(
     listener: GameUiListener
 ) : GLSurfaceView(context) {
 
-    private val renderer = VoxelRenderer(listener)
+    private val renderer = SafeVoxelRenderer(listener)
     private val gestureDetector: GestureDetector
     private val scaleDetector: ScaleGestureDetector
 
@@ -22,7 +22,12 @@ class GameSurfaceView(
     private var lastCentroidY = 0f
 
     init {
+        // Use a predictable GLES2-compatible color/depth surface. The previous
+        // build relied on a driver-selected config and produced a black surface
+        // on some phones.
         setEGLContextClientVersion(2)
+        setEGLConfigChooser(8, 8, 8, 8, 16, 0)
+        preserveEGLContextOnPause = true
         setRenderer(renderer)
         renderMode = RENDERMODE_CONTINUOUSLY
         isFocusable = true
@@ -53,15 +58,18 @@ class GameSurfaceView(
             }
         })
 
-        scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                val factor = detector.scaleFactor
-                if (factor.isFinite() && factor > 0f) {
-                    queueEvent { renderer.zoom(factor) }
+        scaleDetector = ScaleGestureDetector(
+            context,
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    val factor = detector.scaleFactor
+                    if (factor.isFinite() && factor > 0f) {
+                        queueEvent { renderer.zoom(factor) }
+                    }
+                    return true
                 }
-                return true
             }
-        })
+        )
     }
 
     fun resetWorld() = queueEvent { renderer.resetWorld() }
