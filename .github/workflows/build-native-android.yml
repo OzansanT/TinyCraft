@@ -38,23 +38,25 @@ jobs:
           base64 --decode "$GITHUB_WORKSPACE/ci/tinycraft-debug.keystore.b64" > "$HOME/.android/debug.keystore"
           test -s "$HOME/.android/debug.keystore"
 
-      - name: Build native debug APK
+      - name: Build native GPU debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify APK contains no web runtime assets
+      - name: Verify native GPU package
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -f "$APK"
           ! unzip -l "$APK" | grep -E '\.(html|css|js)$|three\.module|WebView|libgdx|badlogic'
+          unzip -p "$APK" classes.dex | strings | grep -q "GpuGameView"
+          unzip -p "$APK" classes.dex | strings | grep -q "ChunkMesher"
 
       - name: Upload APK immediately
         uses: actions/upload-artifact@v4
         with:
-          name: TinyCraft-0.2.5-fullscreen-crashfix-apk
+          name: TinyCraft-0.3.0-gpu-chunks-apk
           path: native-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      - name: Boot Android 16 emulator and verify launch
+      - name: Boot Android 16 emulator and stress launch
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
@@ -66,20 +68,26 @@ jobs:
             adb logcat -c
             adb install -r "$GITHUB_WORKSPACE/native-android/app/build/outputs/apk/debug/app-debug.apk"
             adb shell am start -W -n com.tinycraft.nativeandroid.fullscreen/com.tinycraft.nativeandroid.MainActivity
-            sleep 6
+            sleep 7
             adb shell pidof com.tinycraft.nativeandroid.fullscreen
-            adb exec-out screencap -p > "$GITHUB_WORKSPACE/tinycraft-screen.png"
-            adb logcat -d > "$GITHUB_WORKSPACE/tinycraft-logcat.txt"
-            ! grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL" "$GITHUB_WORKSPACE/tinycraft-logcat.txt"
+            # Exercise camera/swipe input while the TextureView/EGL renderer is alive.
+            adb shell input swipe 200 500 700 420 500
+            adb shell input swipe 700 450 300 600 500
+            adb shell input swipe 500 900 500 500 450
+            sleep 4
+            adb shell pidof com.tinycraft.nativeandroid.fullscreen
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/tinycraft-gpu-screen.png"
+            adb logcat -d > "$GITHUB_WORKSPACE/tinycraft-gpu-logcat.txt"
+            ! grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|eglSwapBuffers failed|GPU shader compile failed|GPU program link failed" "$GITHUB_WORKSPACE/tinycraft-gpu-logcat.txt"
             python3 -m pip install --quiet pillow
-            python3 -c "import os; from PIL import Image,ImageStat; p=os.path.join(os.environ['GITHUB_WORKSPACE'],'tinycraft-screen.png'); im=Image.open(p).convert('RGB'); mean=sum(ImageStat.Stat(im).mean)/3.0; print('Mean screen brightness: %.2f' % mean); assert mean >= 25, 'Visual smoke test failed: screen is effectively black'"
+            python3 -c "import os; from PIL import Image,ImageStat; p=os.path.join(os.environ['GITHUB_WORKSPACE'],'tinycraft-gpu-screen.png'); im=Image.open(p).convert('RGB'); mean=sum(ImageStat.Stat(im).mean)/3.0; print('Mean screen brightness: %.2f' % mean); assert mean >= 25, 'GPU visual smoke test failed: screen is effectively black'"
 
       - name: Upload emulator evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TinyCraft-0.2.5-fullscreen-crashfix-evidence
+          name: TinyCraft-0.3.0-gpu-chunks-evidence
           path: |
-            tinycraft-screen.png
-            tinycraft-logcat.txt
+            tinycraft-gpu-screen.png
+            tinycraft-gpu-logcat.txt
           if-no-files-found: ignore
