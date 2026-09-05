@@ -43,9 +43,43 @@ jobs:
             exit 1
           fi
 
-      - name: Upload APK
+      - name: Boot emulator and verify rendered screen
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            cd native-android
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n com.tinycraft.nativeandroid/.MainActivity
+            sleep 6
+            adb exec-out screencap -p > ../tinycraft-screen.png
+            adb logcat -d > ../tinycraft-logcat.txt
+            if grep -E "FATAL EXCEPTION|OpenGL shader compile failed|program link failed" ../tinycraft-logcat.txt ; then
+              echo "Renderer/runtime failure found in logcat"
+              exit 1
+            fi
+            python3 -m pip install --quiet pillow
+            python3 - <<'PY'
+            from PIL import Image, ImageStat
+            image = Image.open('../tinycraft-screen.png').convert('RGB')
+            mean = sum(ImageStat.Stat(image).mean) / 3.0
+            print(f'Mean screen brightness: {mean:.2f}')
+            if mean < 25:
+                raise SystemExit('Visual smoke test failed: screen is effectively black')
+            PY
+
+      - name: Upload APK and emulator evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: TinyCraft-native-android-apk
-          path: native-android/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            native-android/app/build/outputs/apk/debug/app-debug.apk
+            tinycraft-screen.png
+            tinycraft-logcat.txt
           if-no-files-found: error
